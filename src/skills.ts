@@ -13,13 +13,7 @@ const NAMES = [
   'investigate-first', 'lean-build', 'migration', 'safe-refactor', 'surgical-patch', 'verify-and-stop',
 ] as const
 const knownNames: ReadonlySet<string> = new Set(NAMES)
-const modelInvocable: ReadonlySet<string> = new Set([
-  'caveman', 'ultracave', 'megacave', 'caveman-help',
-  'caveman-commit', 'caveman-review', 'caveman-compress', 'caveman-stats',
-  'cavecrew',
-])
-
-type SkillRead = { description: string; content: string }
+type SkillRead = { description: string; content: string; modelInvocable: boolean; userInvocable: boolean }
 
 async function readSkill(root: string, name: string, signal?: AbortSignal): Promise<SkillRead> {
   const path = join(root, name, 'SKILL.md')
@@ -32,7 +26,12 @@ async function readSkill(root: string, name: string, signal?: AbortSignal): Prom
   if (typeof description !== 'string' || !description.trim()) {
     throw new Error(`dsh-caveman: missing skill description in ${path}`)
   }
-  return { description: description.trim().replace(/\s+/g, ' '), content: raw.slice(frontmatter[0].length).trim() }
+  const fields = metadata as Record<string, unknown>
+  return {
+    description: description.trim().replace(/\s+/g, ' '), content: raw.slice(frontmatter[0].length).trim(),
+    modelInvocable: fields['disable-model-invocation'] !== true,
+    userInvocable: fields['user-invocable'] !== false,
+  }
 }
 
 /** Expose skills through the DSH provider registry. */
@@ -41,24 +40,21 @@ export function createSkillProvider(root: string, control?: SkillProviderControl
   return {
     name: PROVIDER,
     async list({ signal }) {
-      const candidates: SkillCandidate[] = []
-      let complete = true
-      for (const name of NAMES) {
-        try {
-          const { description } = await readSkill(root, name, signal)
-          const directory = join(root, name)
-          candidates.push({
-            name, description, source: 'bundled', provider: PROVIDER,
-            invocation: { modelInvocable: modelInvocable.has(name), userInvocable: true },
-            rank: RANK, locator: name,
-            resourceBase: { kind: 'directory', path: directory.split(sep).join('/') },
-          })
-        } catch (error) {
-          if (signal?.aborted) throw error
-          complete = false
+      const results = await Promise.allSettled(NAMES.map(async (name): Promise<SkillCandidate> => {
+        const { description, modelInvocable, userInvocable } = await readSkill(root, name, signal)
+        const directory = join(root, name)
+        return {
+          name, description, source: 'bundled', provider: PROVIDER,
+          invocation: { modelInvocable, userInvocable },
+          rank: RANK, locator: name,
+          resourceBase: { kind: 'directory', path: directory.split(sep).join('/') },
         }
+      }))
+      signal?.throwIfAborted()
+      return {
+        candidates: results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []),
+        complete: results.every(result => result.status === 'fulfilled'),
       }
-      return { candidates, complete }
     },
     async get(candidate, { signal }): Promise<SkillDefinition | undefined> {
       if (!knownNames.has(candidate.name) || candidate.locator !== candidate.name) return undefined

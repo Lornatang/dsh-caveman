@@ -82,7 +82,7 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 
 ### Voice and usage
 
-Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, `/caveman status`, or `stop caveman`. Mode changes belong to the current session. The 22 Caveman skills are available for explicit invocation; nine voice, commit, review, compression, help, statistics, and delegation skills are also model-invocable.
+Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, `/caveman status`, or `stop caveman`. Mode changes belong to the current session. All 22 Caveman skills are available for explicit invocation; the model can also invoke the skills whose metadata permits it.
 
 `defaultMode` accepts `caveman`, `ultracave`, `megacave`, `manual`, or `off`. An explicit profile value wins; otherwise the resolver checks `CAVEMAN_DEFAULT_MODE`, project configuration, and user configuration before falling back to `caveman`.
 
@@ -99,7 +99,7 @@ Start the local Caveman middleware in `compress` mode. With the `input` module e
     middlewareEndpoint: 'http://127.0.0.1:8787'
 ```
 
-Successful native tool results with one text block of at least 2048 UTF-16 code units are eligible. The model receives a recovery handle only when `caveman_retrieve` is callable. The original remains in the session log and is restored to the visible session after the model request is prepared. If the runtime becomes unavailable, the session can still return exact original pages.
+Text blocks of at least 2048 UTF-16 code units in successful native tool results are eligible; other blocks remain intact. The model receives a recovery handle only when `caveman_retrieve` is callable. The original remains in the session log and is restored to the visible session after the model request is prepared. If the runtime becomes unavailable, the session can still return exact original pages.
 
 ### Auto model selection
 
@@ -176,8 +176,8 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 
 - Auto requires a configured pi-ai provider, Caveman proxy, Cloud login, and OpenAI credential. The integration tests use local mock services.
 - Browse requires the MCP manager, `caveman-browse`, and Chrome. Blocks requires `caveman-blocks` and a local workspace.
-- Native compression handles single-text-block native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
-- Thirteen skills require explicit user invocation, and some require additional CLI, account, or agent setup.
+- Native compression handles text blocks in native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
+- Some skills require additional CLI, account, or agent setup.
 - Cavecrew's inspection roles use read, search, and read-only Git tools; the builder can edit existing files and is limited to two file paths.
 
 <a id="dev-note"></a>
@@ -186,6 +186,6 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 <details>
 <summary>Maintainer context</summary>
 
-`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`.
+`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
 
 </details>

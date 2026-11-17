@@ -36,6 +36,7 @@
   "files": [
     "lib",
     "scripts/caveman-cli.mjs",
+    "scripts/benchmark.mjs",
     "examples",
     "presets",
     "vendor/caveman/skills",
@@ -58,6 +59,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:dsh": "node scripts/verify-dsh.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
     "prepack": "npm test"
   },
   "dsh": {

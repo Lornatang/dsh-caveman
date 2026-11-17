@@ -39,6 +39,30 @@ test('quoted text and injected instructions do not control the mode', () => {
   assert.equal(resolveMode('manual', [], [user('activate caveman')]).mode, 'caveman')
 })
 
+test('session mode replay only reads new events and resets when its inputs change', () => {
+  const { SessionModeTracker } = modeModule
+  const events = [event(user('/ultracave')), event(injected('/megacave'))]
+  const reads = []
+  const session = {
+    get seq() { return events.length },
+    snapshotEvents(from = 0) { reads.push(from); return events.slice(from) },
+  }
+  const tracker = new SessionModeTracker()
+  assert.equal(tracker.resolve('manual', session, [user('continue')]).mode, 'ultracave')
+  events.push(event(user('/megacave')))
+  assert.equal(tracker.resolve('manual', session, [user('continue')]).mode, 'megacave')
+  assert.equal(tracker.resolve('manual', session, [user('stop caveman')]).mode, 'off')
+  assert.equal(tracker.resolve('manual', session, [user('continue')]).mode, 'megacave', 'uncommitted input does not persist')
+  assert.deepEqual(reads, [0, 2, 3, 3])
+  assert.equal(tracker.resolve('off', session, [user('continue')]).mode, 'megacave')
+  assert.equal(reads.at(-1), 0, 'a different default replays history')
+  events.length = 1
+  assert.equal(tracker.resolve('off', session, [user('continue')]).mode, 'ultracave')
+  assert.equal(reads.at(-1), 0, 'a shorter log replays history')
+  const other = { seq: 0, snapshotEvents: () => [] }
+  assert.equal(tracker.resolve('manual', other, [user('continue')]).mode, 'off', 'sessions remain isolated')
+})
+
 test('the environment and project default are used when the profile has no override', async () => {
   assert.ok(modeModule, 'mode adapter is implemented')
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-config-'))

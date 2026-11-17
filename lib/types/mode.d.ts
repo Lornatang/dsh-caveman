@@ -1,3 +1,4 @@
+import type { Session } from '@deepseek-ai/dsh-session';
 export type VoiceMode = 'off' | 'caveman' | 'ultracave' | 'megacave';
 export type DefaultMode = VoiceMode | 'manual';
 export type ModeAction = 'none' | 'change' | 'status' | 'one-shot' | 'unresolved';
@@ -21,4 +22,12 @@ export declare function resolveMode(configured: DefaultMode, events: readonly In
     mode: VoiceMode;
     action: ModeAction;
 };
+/** Incrementally replay immutable session logs; pending messages are never cached. */
+export declare class SessionModeTracker {
+    private readonly states;
+    resolve(configured: DefaultMode, session: Session, pending: readonly InputMessage[]): {
+        mode: VoiceMode;
+        action: ModeAction;
+    };
+}
 export {};

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
@@ -62,9 +64,40 @@ test('every skill is available to an explicit user invocation', async () => {
     }
     assert.equal(catalog.length, expected)
     assert.equal(catalog.find(item => item.name === 'cavecrew').invocation.modelInvocable, true)
-    assert.equal(catalog.find(item => item.name === 'caveman-setup').invocation.modelInvocable, false)
+    assert.equal(catalog.find(item => item.name === 'caveman-setup').invocation.modelInvocable, true)
+    assert.equal(catalog.find(item => item.name === 'investigate-first').invocation.modelInvocable, true)
+    assert.equal(catalog.find(item => item.name === 'ultracave').invocation.modelInvocable, false)
+    assert.equal(catalog.find(item => item.name === 'megacave').invocation.modelInvocable, false)
   } finally {
     dispose()
     await ctx.fiber.dispose()
+  }
+})
+
+test('partial skill discovery preserves order, cancellation, and invalidation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-skills-'))
+  let invalidations = 0
+  try {
+    for (const name of ['caveman', 'ultracave']) {
+      await mkdir(join(directory, name))
+      const permission = name === 'caveman' ? 'disable-model-invocation: true' : 'user-invocable: false'
+      await writeFile(join(directory, name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${name} description\n${permission}\n---\n${name} instructions\n`)
+    }
+    const { createSkillProvider } = await providerModule()
+    const provider = createSkillProvider(directory, { invalidate() { invalidations++ } })
+    const result = await provider.list({})
+    assert.equal(result.complete, false)
+    assert.deepEqual(result.candidates.map(candidate => candidate.name), ['caveman', 'ultracave'])
+    assert.equal(result.candidates[0].invocation.modelInvocable, false)
+    assert.equal(result.candidates[1].invocation.userInvocable, false)
+    const controller = new AbortController()
+    controller.abort()
+    await assert.rejects(provider.list({ signal: controller.signal }))
+    await rm(join(directory, 'caveman', 'SKILL.md'))
+    assert.equal(await provider.get(result.candidates[0], {}), undefined)
+    assert.equal(invalidations, 1)
+  } finally {
+    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-caveman-skills-')) throw new Error('unexpected test directory')
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
   }
 })

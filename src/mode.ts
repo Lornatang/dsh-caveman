@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import type { Session, SessionLogOffset } from '@deepseek-ai/dsh-session'
 
 export type VoiceMode = 'off' | 'caveman' | 'ultracave' | 'megacave'
 export type DefaultMode = VoiceMode | 'manual'
@@ -40,15 +41,17 @@ function transition(mode: VoiceMode, message: InputMessage, configured: DefaultM
   return { mode, action: 'none' }
 }
 
-/** Replay only user-authored messages, then evaluate the incoming batch. */
-export function resolveMode(configured: DefaultMode, events: readonly InputEvent[], pending: readonly InputMessage[]): { mode: VoiceMode; action: ModeAction } {
-  let mode: VoiceMode = configured === 'manual' ? 'off' : configured
+function replay(mode: VoiceMode, configured: DefaultMode, events: readonly InputEvent[]): VoiceMode {
   for (const event of events) {
     if (event.type !== 'user/message' || !event.data || typeof event.data !== 'object') continue
     const message = event.data as InputMessage
     if (!message.source || !Array.isArray(message.content)) continue
     mode = transition(mode, message, configured).mode
   }
+  return mode
+}
+
+function resolvePending(mode: VoiceMode, configured: DefaultMode, pending: readonly InputMessage[]): { mode: VoiceMode; action: ModeAction } {
   let action: ModeAction = 'none'
   for (const message of pending) {
     const result = transition(mode, message, configured)
@@ -56,4 +59,26 @@ export function resolveMode(configured: DefaultMode, events: readonly InputEvent
     if (result.action !== 'none') action = result.action
   }
   return { mode, action }
+}
+
+/** Replay only user-authored messages, then evaluate the incoming batch. */
+export function resolveMode(configured: DefaultMode, events: readonly InputEvent[], pending: readonly InputMessage[]): { mode: VoiceMode; action: ModeAction } {
+  const initial = configured === 'manual' ? 'off' : configured
+  return resolvePending(replay(initial, configured, events), configured, pending)
+}
+
+/** Incrementally replay immutable session logs; pending messages are never cached. */
+export class SessionModeTracker {
+  private readonly states = new WeakMap<Session, { seq: SessionLogOffset; configured: DefaultMode; mode: VoiceMode }>()
+
+  resolve(configured: DefaultMode, session: Session, pending: readonly InputMessage[]): { mode: VoiceMode; action: ModeAction } {
+    const end = session.seq
+    const previous = this.states.get(session)
+    const reusable = previous && previous.configured === configured && previous.seq <= end
+    const initial: VoiceMode = reusable ? previous.mode : configured === 'manual' ? 'off' : configured
+    const events = session.snapshotEvents(reusable ? previous.seq : undefined, end)
+    const mode = replay(initial, configured, events)
+    this.states.set(session, { seq: end, configured, mode })
+    return resolvePending(mode, configured, pending)
+  }
 }

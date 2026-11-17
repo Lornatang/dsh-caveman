@@ -1,6 +1,34 @@
 import type { Context } from '@deepseek-ai/cordis';
+import type { Session, SessionEvent } from '@deepseek-ai/dsh-session';
+/** Resolve immutable event ancestry once per session, reusing earlier results. */
+export declare function resolveOriginalResult(session: Session, event: SessionEvent<'tool/result'>): SessionEvent<'tool/result'>;
+type ExpectedProjection = {
+    callId: string;
+    blocks: readonly {
+        index: number;
+        text: string;
+    }[];
+};
+type ProjectedMessage = {
+    role: string;
+    toolCallId?: string;
+    content: readonly {
+        type: string;
+        text?: string;
+    }[];
+};
+/** Check the changed blocks on each matching tool result, including partial projections. */
+export declare function projectionCoverage(expected: readonly ExpectedProjection[], messages: readonly ProjectedMessage[]): 'none' | 'incomplete' | 'complete';
+/** Keep each result together while respecting middleware limits and unique segment ids. */
+export declare function planCompressionBatches<T extends {
+    bytes: number;
+    segments: readonly {
+        id: string;
+    }[];
+}>(items: readonly T[], byteBudget: number, maxSegments: number): T[][];
 /** Install recoverable compression using the middleware protocol. */
 export declare function registerCompression(ctx: Context, endpoint: string, automatic?: {
     fetch: typeof fetch;
     available: (signal: AbortSignal) => Promise<boolean>;
 }): void;
+export {};

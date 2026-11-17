@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-mcp-manager'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { createSkillProvider } from './skills.js'
-import { defaultModeFor, resolveMode, type DefaultMode, type VoiceMode } from './mode.js'
+import { defaultModeFor, SessionModeTracker, type DefaultMode, type VoiceMode } from './mode.js'
 import { registerCompression } from './compression.js'
 import { registerBlocks } from './blocks.js'
 import { sessionStats } from './stats.js'
@@ -37,6 +37,7 @@ export const Config: z<Config> = z.object({
 /** Register skills and reinforce the selected mode per session. */
 export function apply(ctx: Context, config: Config = {}): void {
   const root = fileURLToPath(new URL('../vendor/caveman/skills/', import.meta.url))
+  const modes = new SessionModeTracker()
   ctx.skills.registerProvider(control => createSkillProvider(root, control))
   if (config.inputCompression !== false && moduleEnabled('input')) {
     const endpoint = config.middlewareEndpoint ?? 'http://127.0.0.1:8787'
@@ -77,7 +78,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
     const directory = ctx.get('workingDirectory') as { ensure(agent: Agent, signal: AbortSignal): Promise<string> } | undefined
     const cwd = directory ? await directory.ensure(agent, signal) : agent.session.header.cwd
-    const selected = resolveMode(defaultModeFor(config.defaultMode, cwd), agent.session.snapshotEvents(), directMessages)
+    const selected = modes.resolve(defaultModeFor(config.defaultMode, cwd), agent.session, directMessages)
     if (selected.action === 'one-shot' || (selected.mode === 'off' && selected.action === 'none')) return decision
     let text: string
     if (selected.action === 'status') {

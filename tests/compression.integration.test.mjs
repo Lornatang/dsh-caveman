@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer as createHttpServer, request as httpRequest } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -161,6 +162,223 @@ test('a verified local runtime enables compression and offline recovery automati
 
 test('disabling input compression keeps the original tool output', { skip: !proxyBinary }, async () => {
   await exerciseRecovery(false, false, false, true, true)
+})
+
+test('multiple tool-result text blocks remain separate and recoverable', { skip: !proxyBinary }, async () => {
+  const service = await startProxy()
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
+  const ctx = new Context()
+  const second = original.replaceAll('GET /api/test', 'POST /api/check')
+  class MultiAdapter extends LlmAdapter {
+    requests = []
+    handles = []
+    async resolveModel(provider, model) { return { provider, id: model, name: model } }
+    async *stream(options) {
+      this.requests.push(options)
+      let chunks
+      if (this.requests.length === 1) chunks = call('multi-output', 'multi_fixture', {})
+      else if (this.requests.length === 2) {
+        const blocks = options.messages.filter(message => message.role === 'tool').at(-1).content
+        this.handles = blocks.map(block => /handle=(cmw_[a-f0-9]{48})/.exec(block.text ?? '')?.[1])
+        if (this.handles[0] && this.handles[3]) await service.stop()
+        chunks = this.handles[0] && this.handles[3] ? call('recover-first', 'caveman_retrieve', { handle: this.handles[0] }) : [{ type: 'finish', reason: { kind: 'stop' } }]
+      } else if (this.requests.length === 3) chunks = call('recover-second', 'caveman_retrieve', { handle: this.handles[3] })
+      else chunks = [{ type: 'finish', reason: { kind: 'stop' } }]
+      for (const chunk of chunks) yield chunk
+    }
+  }
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(plugin, { defaultMode: 'manual', middlewareEndpoint: service.endpoint })
+    ctx.tools.register(defineTool({
+      name: 'multi_fixture', description: 'Return several text blocks.', parameters: {},
+      output: { schema: { type: 'string' }, render: () => [
+        { type: 'text', text: original }, { type: 'text', text: 'short block' },
+        { type: 'reasoning', text: 'other block' }, { type: 'text', text: second },
+      ] },
+      async execute() { return 'fixture' },
+    }))
+    const adapter = new MultiAdapter()
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = await ctx.agentLoop.create('multi-compression-session', { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the sample.' }] }))
+    await agent.whenIdle()
+    assert.equal(adapter.requests.length, 4, 'both original blocks can be recovered after the runtime stops')
+    const compressed = adapter.requests[1].messages.filter(message => message.role === 'tool').at(-1).content
+    assert.equal(compressed.length, 4)
+    assert.ok(compressed[0].text.length < original.length / 4)
+    assert.equal(compressed[1].text, 'short block')
+    assert.deepEqual(compressed[2], { type: 'reasoning', text: 'other block' })
+    assert.ok(compressed[3].text.length < second.length / 4)
+    const firstRecovery = adapter.requests[2].messages.filter(message => message.role === 'tool').at(-1).content[0].text
+    const secondRecovery = adapter.requests[3].messages.filter(message => message.role === 'tool').at(-1).content[0].text
+    assert.equal(JSON.parse(firstRecovery).text, original)
+    assert.equal(JSON.parse(secondRecovery).text, second)
+    const surface = agent.session.surface.nodes.map(seq => agent.session.eventAt(seq))
+    const visible = surface.find(event => event.type === 'tool/result' && event.data.message.toolCallId === 'multi-output')
+    assert.deepEqual(visible.data.message.content, [
+      { type: 'text', text: original }, { type: 'text', text: 'short block' },
+      { type: 'reasoning', text: 'other block' }, { type: 'text', text: second },
+    ])
+  } finally {
+    await ctx.fiber.dispose()
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    await service.close()
+  }
+})
+
+test('multiple tool results share an optimization request', { skip: !proxyBinary }, async t => {
+  const service = await startProxy()
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
+  let optimizeCalls = 0
+  const destination = new URL(service.endpoint)
+  const relay = createHttpServer((incoming, outgoing) => {
+    if (incoming.url?.endsWith('/optimize')) optimizeCalls++
+    const request = httpRequest({ hostname: destination.hostname, port: destination.port, path: incoming.url, method: incoming.method, headers: incoming.headers, agent: false }, response => {
+      outgoing.writeHead(response.statusCode ?? 500, response.headers)
+      response.pipe(outgoing)
+    })
+    request.on('error', () => { if (!outgoing.headersSent) outgoing.writeHead(502); outgoing.end() })
+    incoming.pipe(request)
+  })
+  await new Promise((resolve, reject) => relay.listen(0, '127.0.0.1', resolve).on('error', reject))
+  const endpoint = `http://127.0.0.1:${relay.address().port}`
+  const ctx = new Context()
+  class BatchAdapter extends LlmAdapter {
+    requests = []
+    async resolveModel(provider, model) { return { provider, id: model, name: model } }
+    async *stream(options) {
+      this.requests.push(options)
+      if (this.requests.length === 1) {
+        for (let index = 0; index < 8; index++) {
+          const id = `batch-${index}`
+          const args = JSON.stringify({ index })
+          yield { type: 'block-start', index, blockType: 'tool-call' }
+          yield { type: 'tool-call-delta', index, id, name: 'batch_fixture', argumentsDelta: args }
+          yield { type: 'block-end', index, block: { type: 'tool-call', id, name: 'batch_fixture', arguments: args } }
+        }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+      } else yield { type: 'finish', reason: { kind: 'stop' } }
+    }
+  }
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: true, middlewareEndpoint: endpoint })
+    ctx.tools.register(defineTool({
+      name: 'batch_fixture', description: 'Return a large log.', parameters: { index: { type: 'integer', required: true } },
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute(args) { return original.replaceAll('/api/test', `/api/test/${args.index}`) },
+    }))
+    const adapter = new BatchAdapter()
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = await ctx.agentLoop.create('batch-compression-session', { provider: 'mock', model: 'mock' })
+    const started = performance.now()
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the logs.' }] }))
+    await agent.whenIdle()
+    const elapsed = performance.now() - started
+    const messages = adapter.requests[1].messages.filter(message => message.role === 'tool')
+    assert.equal(messages.length, 8)
+    assert.ok(messages.every(message => message.content[0].text.length < original.length / 4))
+    const capabilities = await (await fetch(`${service.endpoint}/caveman/v1/middleware/capabilities`)).json()
+    t.diagnostic(`8 results: ${optimizeCalls} optimization requests, ${elapsed.toFixed(1)} ms; limits ${JSON.stringify(capabilities.limits)}`)
+    assert.equal(optimizeCalls, 1)
+    const originals = agent.session.surface.nodes.map(seq => agent.session.eventAt(seq))
+      .filter(event => event.type === 'tool/result' && event.data.message.toolCallId.startsWith('batch-'))
+    assert.equal(originals.length, 8)
+    assert.ok(originals.every(event => event.data.message.content[0].text.length > original.length))
+    await service.stop()
+    for (const index of [0, 7]) {
+      const handle = /handle=(cmw_[a-f0-9]{48})/.exec(messages[index].content[0].text)?.[1]
+      assert.ok(handle)
+      const recovered = await ctx.tools.execute({
+        agent, signal: new AbortController().signal,
+        calls: [{ type: 'tool-call', id: `recover-${index}`, name: 'caveman_retrieve', arguments: JSON.stringify({ handle }) }],
+      })
+      assert.equal(recovered.results[0].result.isError, false)
+      assert.equal(JSON.parse(recovered.results[0].result.content[0].text).text, original.replaceAll('/api/test', `/api/test/${index}`))
+    }
+  } finally {
+    await ctx.fiber.dispose()
+    await new Promise(resolve => relay.close(resolve))
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    await service.close()
+  }
+})
+
+test('a changing session surface invalidates an in-flight compression plan', { skip: !proxyBinary }, async () => {
+  const service = await startProxy()
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
+  const destination = new URL(service.endpoint)
+  let agent
+  let changed = false
+  const relay = createHttpServer((incoming, outgoing) => {
+    if (!changed && incoming.url?.endsWith('/optimize')) {
+      changed = true
+      agent.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Concurrent session update.' }] }), { surfaceOp: 'append' })
+    }
+    const request = httpRequest({ hostname: destination.hostname, port: destination.port, path: incoming.url, method: incoming.method, headers: incoming.headers, agent: false }, response => {
+      outgoing.writeHead(response.statusCode ?? 500, response.headers)
+      response.pipe(outgoing)
+    })
+    request.on('error', () => { if (!outgoing.headersSent) outgoing.writeHead(502); outgoing.end() })
+    incoming.pipe(request)
+  })
+  await new Promise((resolve, reject) => relay.listen(0, '127.0.0.1', resolve).on('error', reject))
+  const ctx = new Context()
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: true, middlewareEndpoint: `http://127.0.0.1:${relay.address().port}` })
+    ctx.tools.register(defineTool({
+      name: 'large_fixture', description: 'Return a large log.', parameters: {},
+      output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+      async execute() { return original },
+    }))
+    const adapter = new LocalAdapter()
+    ctx.llm.registerAdapter(['mock'], adapter)
+    agent = await ctx.agentLoop.create('changing-compression-session', { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the log.' }] }))
+    await agent.whenIdle()
+    assert.equal(changed, true)
+    assert.equal(adapter.requests.length, 2)
+    const result = adapter.requests[1].messages.find(message => message.role === 'tool' && message.toolCallId === 'output-call')
+    assert.equal(result.content[0].text, original)
+    assert.ok(adapter.requests[1].messages.some(message => message.role === 'user' && message.content.some(block => block.text === 'Concurrent session update.')))
+  } finally {
+    await ctx.fiber.dispose()
+    await new Promise(resolve => relay.close(resolve))
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    await service.close()
+  }
 })
 
 test('the original remains recoverable from the session if the proxy stops', { skip: !proxyBinary }, async () => {

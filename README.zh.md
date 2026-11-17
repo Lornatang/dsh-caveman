@@ -82,7 +82,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 ### 回答模式与用量
 
-可使用 `/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 和 `stop caveman`。模式切换只影响当前会话。22 个 Caveman 技能均可由用户显式调用，其中回答风格、提交、审查、压缩、帮助、统计和委派相关的九个技能也可由模型调用。
+可使用 `/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 和 `stop caveman`。模式切换只影响当前会话。22 个 Caveman 技能均可由用户显式调用，元数据允许的技能也可由模型调用。
 
 `defaultMode` 可设为 `caveman`、`ultracave`、`megacave`、`manual` 或 `off`。profile 的显式配置优先；否则依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
 
@@ -99,7 +99,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
     middlewareEndpoint: 'http://127.0.0.1:8787'
 ```
 
-成功、只含一个文本块且不少于 2048 个 UTF-16 代码单元的原生工具结果可参与压缩。只有模型可以调用 `caveman_retrieve` 时才会提供恢复句柄。原文保留在会话日志中，模型请求准备好后会恢复到可见会话；运行时不可用时，仍可从会话恢复精确分页。
+成功的原生工具结果中，不少于 2048 个 UTF-16 代码单元的文本块可参与压缩，其余内容保持不变。只有模型可以调用 `caveman_retrieve` 时才会提供恢复句柄。原文保留在会话日志中，模型请求准备好后会恢复到可见会话；运行时不可用时，仍可从会话恢复精确分页。
 
 ### Auto 自动选模
 
@@ -176,8 +176,8 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 
 - Auto 需要配置 pi-ai provider、Caveman 代理、Cloud 登录和 OpenAI 凭证；集成测试使用本地模拟服务。
 - Browse 需要 MCP manager、`caveman-browse` 和 Chrome；Blocks 需要 `caveman-blocks` 与本地工作区。
-- 原生压缩处理单文本块的原生工具结果。离线恢复提供精确分页，按文本查询需要 middleware。
-- 13 个技能需要用户显式调用，部分技能还需要额外的 CLI、账号或 agent 配置。
+- 原生压缩处理原生工具结果中的文本块。离线恢复提供精确分页，按文本查询需要 middleware。
+- 部分技能需要额外的 CLI、账号或 agent 配置。
 - Cavecrew 的检查角色使用读取、搜索和只读 Git 工具；构建角色可编辑现有文件，限两个文件路径。
 
 <a id="dev-note"></a>
@@ -186,6 +186,6 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
 
 </details>
