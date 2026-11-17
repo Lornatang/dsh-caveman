@@ -97,7 +97,15 @@ output 模块和 Core 启用时，原生编码规则会加入系统提示词。�
 
 ### 可恢复压缩
 
-启动本地 Caveman middleware 并将其模式设为 `compress`。`input` 模块启用时，插件会发现回环地址上的运行时，并在发送工具内容前验证其本地运行状态。将 `inputCompression` 设为 `false` 可以关闭；也可在 profile 中显式指定 middleware 地址：
+安装签名验证的运行组件，启用压缩并启动本地 middleware：
+
+```sh
+npx @lornatang/dsh-caveman setup --install
+npx @lornatang/dsh-caveman tools config set think.mode compress
+npx @lornatang/dsh-caveman start
+```
+
+保持最后一条命令运行。`input` 模块启用时，插件会发现回环地址上的运行时，并在发送工具内容前验证其本地运行状态。将 `inputCompression` 设为 `false` 可以关闭；也可在 profile 中显式指定 middleware 地址：
 
 ```yaml
 - id: caveman
@@ -110,7 +118,7 @@ output 模块和 Core 启用时，原生编码规则会加入系统提示词。�
 
 ### Auto 自动选模
 
-安装 [Caveman CLI](https://www.npmjs.com/package/@caveman-ai/cli)，通过 `caveman login` 登录，启用 `routing` 模块，再用 `caveman start` 启动本地代理。通过 DSH 凭证服务或环境变量提供 `OPENAI_API_KEY`。
+使用 `npx @lornatang/dsh-caveman login` 登录、启用 `routing` 模块，并按上文启动本地代理。通过 DSH 凭证服务或环境变量提供 `OPENAI_API_KEY`。
 
 把 [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) 中的 `caveman-auto` provider 加入现有 `llm-pi-ai` 配置，保留其他 provider，然后在 DSH 中选择其 `caveman-auto` 模型。示例只展示 provider map 的一部分；直接用它完整替换 map 会移除其他路由。
 

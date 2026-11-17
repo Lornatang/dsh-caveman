@@ -97,7 +97,15 @@ The native coding policy is included in the system prompt when the output module
 
 ### Recoverable compression
 
-Start the local Caveman middleware in `compress` mode. With the `input` module enabled, the plugin detects its loopback listener and verifies it against the runtime's local run-state before sending tool content. Set `inputCompression: false` to turn this off. To explicitly use a configured middleware endpoint, set:
+Install the signed runtime components, select compression, and start the local middleware:
+
+```sh
+npx @lornatang/dsh-caveman setup --install
+npx @lornatang/dsh-caveman tools config set think.mode compress
+npx @lornatang/dsh-caveman start
+```
+
+Keep the last command running. With the `input` module enabled, the plugin detects its loopback listener and verifies it against the runtime's local run-state before sending tool content. Set `inputCompression: false` to turn this off. To explicitly use a configured middleware endpoint, set:
 
 ```yaml
 - id: caveman
@@ -110,7 +118,7 @@ Text blocks of at least 2048 UTF-16 code units in successful tool results are el
 
 ### Auto model selection
 
-Install the [Caveman CLI](https://www.npmjs.com/package/@caveman-ai/cli), sign in with `caveman login`, enable the `routing` module, and start the local proxy with `caveman start`. Make an OpenAI credential available to DSH as `OPENAI_API_KEY`.
+Sign in with `npx @lornatang/dsh-caveman login`, enable the `routing` module, and start the local proxy as shown above. Make an OpenAI credential available to DSH as `OPENAI_API_KEY`.
 
 Merge the `caveman-auto` provider from [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) into the existing `llm-pi-ai` provider configuration, preserving other providers, and select its `caveman-auto` model. The example is an excerpt; replacing the entire provider map with it would remove other routes.
 
