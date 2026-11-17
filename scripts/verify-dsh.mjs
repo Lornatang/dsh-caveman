@@ -41,8 +41,16 @@ try {
   const profile = join(env.DSH_HOME, 'profiles', 'caveman-test')
   const installed = JSON.parse(await readFile(join(profile, 'node_modules', '@lornatang', 'dsh-caveman', 'package.json'), 'utf8'))
   assert.equal(installed.name, '@lornatang/dsh-caveman')
+  for (const role of ['investigator', 'builder', 'reviewer']) {
+    const path = join(profile, 'node_modules', '@lornatang', 'dsh-caveman', 'upstream', 'agents', `cavecrew-${role}.md`)
+    assert.ok((await readFile(path, 'utf8')).includes(`name: cavecrew-${role}`), `missing ${role} persona`)
+  }
   const composed = (await dsh(['--profile', 'caveman-test', '--dump-config'])).stdout
   assert.ok(composed.includes('@lornatang/dsh-caveman'), 'bundle was not composed into the profile')
+  for (const role of ['investigator', 'builder', 'reviewer']) {
+    assert.ok(composed.includes(`preset-cavecrew-${role}`), `missing ${role} preset`)
+    assert.ok(composed.includes(`tool-cavecrew-${role}`), `missing ${role} delegation tool`)
+  }
   server = spawn(executable, [...prefix, '--profile', 'caveman-test', '--no-open', '--port', '0'], {
     env, cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -62,6 +70,7 @@ try {
   await dsh(['plugin', '--profile', 'caveman-test', 'remove', '@lornatang/dsh-caveman'])
   const removed = (await dsh(['--profile', 'caveman-test', '--dump-config'])).stdout
   assert.ok(!removed.includes('@lornatang/dsh-caveman'), 'bundle was not removed from the profile')
+  assert.ok(!removed.includes('preset-cavecrew-investigator'), 'Cavecrew presets were not removed from the profile')
   console.log(`DSH ${version}: packed bundle installed, composed, booted, and removed in an isolated profile.`)
 } catch (error) {
   const diagnostics = output.split('\n').filter(line => /caveman|warning|error/i.test(line) && !/token|https?:\/\//i.test(line)).slice(-20)

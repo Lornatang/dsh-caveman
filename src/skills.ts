@@ -16,6 +16,7 @@ const knownNames: ReadonlySet<string> = new Set(NAMES)
 const modelInvocable: ReadonlySet<string> = new Set([
   'caveman', 'ultracave', 'megacave', 'caveman-help',
   'caveman-commit', 'caveman-review', 'caveman-compress', 'caveman-stats',
+  'cavecrew',
 ])
 
 type SkillRead = { description: string; content: string }

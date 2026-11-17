@@ -6,6 +6,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-mcp-manager'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { createSkillProvider } from './skills.js'
 import { defaultModeFor, resolveMode, type DefaultMode, type VoiceMode } from './mode.js'
 import { registerCompression } from './compression.js'
@@ -49,6 +50,8 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
+    const preset = ctx.get('agentPresets')?.composedPreset(agent.ctx)
+    if (preset === 'cavecrew-investigator' || preset === 'cavecrew-builder' || preset === 'cavecrew-reviewer') return decision
     const directMessages = decision.messages.filter(message => message.source.kind === 'user')
     if (directMessages.length === 0) return decision
     signal.throwIfAborted()

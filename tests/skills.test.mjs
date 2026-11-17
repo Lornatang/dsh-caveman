@@ -61,6 +61,7 @@ test('every upstream skill is available to an explicit user invocation', async (
       assert.equal(skill.content, original.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '').trim())
     }
     assert.equal(catalog.length, expected)
+    assert.equal(catalog.find(item => item.name === 'cavecrew').invocation.modelInvocable, true)
     assert.equal(catalog.find(item => item.name === 'caveman-setup').invocation.modelInvocable, false)
   } finally {
     dispose()

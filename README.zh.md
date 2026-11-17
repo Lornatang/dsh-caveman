@@ -1,5 +1,5 @@
 ---
-description: "面向 DeepSeek Harness 的独立 Caveman 集成，提供回答风格与可恢复的工具结果压缩。"
+description: "面向 DeepSeek Harness 的 Caveman 回答风格、可恢复压缩、浏览器工具与子代理。"
 kind: "package-bundle"
 ---
 
@@ -7,11 +7,9 @@ kind: "package-bundle"
 
 [English](README.md) | 中文
 
-> **开发中。** 本仓库保存了完整的上游公开源码快照，但 DSH 适配层尚未复刻全部上游能力，npm 包尚未发布。使用前请查看[已知限制](#known-limitations-and-deferred-work)。
-
 ## 概要
 
-`dsh-caveman` 是 [Caveman](https://github.com/JuliusBrussee/caveman) 的独立 DeepSeek Harness 集成。它注册上游原始回答风格技能，按会话跟踪模式变化，并可借助上游 middleware 压缩符合条件的原生工具结果，同时保留原文恢复途径。可选的 Blocks 和 Browse 集成提供 shell 建议和浏览器工具。命令行包装器把参数转发给上游已发布的 CLI。`upstream/` 保存上游提交 `9b243662ff98d392bc0a95b865a554583d71be75` 的完整公开源码。
+`dsh-caveman` 为 DeepSeek Harness 提供 Caveman 技能和工具，包括按会话隔离的回答风格、可恢复的工具结果压缩、Auto 选模、Blocks 建议、Browse 工具和 Cavecrew 子代理。将 bundle 安装到 profile 后，该 profile 的会话即可使用相应能力。
 
 ## 目录
 
@@ -19,7 +17,7 @@ kind: "package-bundle"
 - [理解实现](#understand-the-implementation)
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
-- [已知限制与后续工作](#known-limitations-and-deferred-work)
+- [已知限制](#known-limitations-and-deferred-work)
 - [开发者注记](#dev-note)
 
 -----
@@ -27,7 +25,7 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-把 bundle 安装到需要使用 Caveman 的会话所在的 profile。需要 Node.js 22.19 或更新版本以及 DSH。
+需要 Node.js 22.19 或更新版本以及 DSH。把 bundle 安装到需要使用 Caveman 的会话所在的 profile。
 
 ### 安装到 profile
 
@@ -38,7 +36,7 @@ dsh plugin --profile <name> add @lornatang/dsh-caveman
 dsh plugin --profile <name> remove @lornatang/dsh-caveman
 ```
 
-该包目前尚未发布，因此现在不能通过 npm 的 `add` 命令安装。要试用当前开发版，请先打包仓库，再安装生成的本地 tarball：
+也可以从仓库打包并安装：
 
 ```sh
 git clone https://github.com/Lornatang/dsh-caveman.git
@@ -48,23 +46,24 @@ npm pack
 dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 ```
 
-`add` 命令把 bundle 组合进 profile：`cordis.patch.yml` 插入一条 id 为 `caveman` 的行，`package.json` 通过 `dsh.bundle.patch` 声明该 patch。行不带配置时，插件采用上游回答模式默认值，压缩、Blocks 和 Browse 均未启用。`add` 或 `remove` 后重启 DSH：profile 加载时才会组合这条行。
+`add` 命令把 bundle 组合进 profile。patch 会插入 `caveman` 行、三个 Cavecrew 预设及其委派工具。`add` 或 `remove` 后重启 DSH，使 profile 重新加载配置。
 
 ### 你会得到
 
 | 暴露面 | 提供方 |
 |---|---|
-| 上游 Caveman 技能与按会话隔离的回答规则 | 宿主入口、`src/skills.ts` 和 `src/mode.ts` |
-| 报告当前会话已记录用量的 `/caveman-stats` | 宿主入口、`src/stats.ts` |
-| 启用后可恢复的原生工具结果压缩及 `caveman_retrieve` | 宿主入口、`src/compression.ts` 和上游 middleware |
-| 手动配置 DSH provider 后的 Auto 选模 | DSH pi-ai 适配器和上游代理 |
-| 配置 Blocks 后的 shell 命令建议 | 宿主入口、`src/blocks.ts` 和上游 Blocks 钩子 |
-| 配置 Browse 后的 `mcp__caveman_browse__*` 工具 | DSH MCP manager 和上游 Browse 服务 |
-| 作为 Node 包安装时提供的 `dsh-caveman` 命令 | `scripts/caveman-cli.mjs` 和上游 CLI |
+| Caveman 技能与按会话隔离的回答风格 | `src/skills.ts`、`src/mode.ts` |
+| 报告当前会话已记录用量的 `/caveman-stats` | `src/stats.ts` |
+| 可恢复的工具结果压缩与 `caveman_retrieve` | `src/compression.ts` 和 middleware 运行时 |
+| Auto 自动选模 | DSH pi-ai provider 和 Caveman 代理 |
+| Shell 命令建议 | `src/blocks.ts` 和 Blocks |
+| `mcp__caveman_browse__*` 浏览器工具 | DSH MCP manager 和 Browse |
+| `cavecrew-investigator`、`cavecrew-builder`、`cavecrew-reviewer` | `presets/cavecrew.patch.yml` 和 `src/cavecrew.ts` |
+| 作为 Node 包安装时提供的 `dsh-caveman` 命令 | `scripts/caveman-cli.mjs` 和 `@caveman-ai/cli` |
 
 ### 配置
 
-bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 中加入覆盖行，只列出需要修改的字段：
+bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖行，只列出需要修改的字段：
 
 ```yaml
 # $DSH_HOME/profiles/<name>/cordis.patch.yml
@@ -75,77 +74,54 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `defaultMode` | 上游配置，未设置时为 `caveman` | 每个会话的初始回答模式。 |
+| `defaultMode` | 由配置决定，未设置时为 `caveman` | 会话的初始回答风格。 |
 | `inputCompression` | `false` | 启用可恢复的原生工具结果压缩。 |
-| `middlewareEndpoint` | `http://127.0.0.1:8787` | 上游 middleware 地址；当前只允许回环地址。 |
-| `blocksBinary` | 未设置 | 上游 Blocks 可执行文件的绝对路径。 |
-| `browseBinary` | 未设置 | 上游 Browse 可执行文件的绝对路径；需要 DSH MCP manager。 |
+| `middlewareEndpoint` | `http://127.0.0.1:8787` | middleware 回环地址。 |
+| `blocksBinary` | 未设置 | `caveman-blocks` 可执行文件的绝对路径。 |
+| `browseBinary` | 未设置 | `caveman-browse` 可执行文件的绝对路径；需要 DSH MCP manager。 |
 
-### 回答模式与命令
+### 回答模式与用量
 
-默认模式为 `caveman`。`/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 与 `stop caveman` 均由上游解析器识别。模式按 DSH 会话隔离。全部 22 个原始技能正文均可由用户显式调用；其中 `caveman`、`ultracave`、`megacave`、`caveman-help`、`caveman-commit`、`caveman-review`、`caveman-compress` 和 `caveman-stats` 也可由模型调用，其余仅供用户显式调用。部分技能涉及上游 CLI、账号或其他 agent 集成，需要单独配置；`caveman-compress` 还需要其上游说明中的 Python 与模型提供方配置。
+可使用 `/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 和 `stop caveman`。模式切换只影响当前会话。22 个 Caveman 技能均可由用户显式调用，其中回答风格、提交、审查、压缩、帮助、统计和委派相关的九个技能也可由模型调用。
 
-可在 profile 行中选择启动模式：
+`defaultMode` 可设为 `caveman`、`ultracave`、`megacave`、`manual` 或 `off`。profile 的显式配置优先；否则依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
 
-```yaml
-- id: caveman
-  config:
-    defaultMode: manual
-```
+`/caveman-stats` 报告当前会话已提交 assistant 消息中记录的用量，说明哪些消息没有用量，排除未提交的尝试。没有对照数据时，节省量为未知。
 
-可选值为 `caveman`、`ultracave`、`megacave`、`manual` 和 `off`。`manual` 从普通回答开始，仍允许显式启用；`off` 遵循上游关闭默认模式的行为。profile 显式配置优先；未配置时，上游解析器依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
+### 可恢复压缩
 
-`/caveman-stats` 报告当前 DSH 会话已提交 assistant 消息中记录的用量，说明有多少消息包含用量，排除未提交的尝试，并将节省量标记为未知。Claude Code 实现中的历史统计和分享选项不受支持。
-
-### 可恢复的工具结果压缩
-
-压缩需要显式启用。先在回环地址启动兼容的上游 Caveman middleware，且将 middleware 模式设为 `compress`，再配置 profile 行：
+在回环地址启动兼容的 Caveman middleware，并将其模式设为 `compress`，然后在 profile 中启用：
 
 ```yaml
 - id: caveman
   config:
-    defaultMode: caveman
     inputCompression: true
     middlewareEndpoint: 'http://127.0.0.1:8787'
 ```
 
-只考虑成功、仅含一个文本块且不少于 2048 个 UTF-16 代码单元的原生工具结果。上游 SDK 可能决定保留原文。应用压缩结果前，适配层检查模型能否使用准确的 `caveman_retrieve` 工具。未修改的结果保留在 DSH 会话日志中；模型请求准备好后，适配层把原文恢复到可见会话。middleware 停止时，也可从该会话日志恢复原文分页。运行时不可用、拒绝请求或无法提供恢复时，原结果保持不变。本适配层没有开启远程内容传输。
+成功、只含一个文本块且不少于 2048 个 UTF-16 代码单元的原生工具结果可参与压缩。只有模型可以调用 `caveman_retrieve` 时才会提供恢复句柄。原文保留在会话日志中，模型请求准备好后会恢复到可见会话；运行时不可用时，仍可从会话恢复精确分页。
 
 ### Auto 自动选模
 
-通过手动配置 DSH pi-ai provider 和原始 Caveman 代理，可以使用 Auto。先安装[上游 CLI](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/packages/cli/README.md)，运行 `caveman login` 登录，确保 `routing` 模块开启，再用 `caveman start` 启动本地代理。DSH 还需通过凭证服务或环境变量提供 `OPENAI_API_KEY`。
+安装 [Caveman CLI](https://www.npmjs.com/package/@caveman-ai/cli)，通过 `caveman login` 登录，启用 `routing` 模块，再用 `caveman start` 启动本地代理。通过 DSH 凭证服务或环境变量提供 `OPENAI_API_KEY`。
 
-把 [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) 中的 `caveman-auto` 条目加入现有 `llm-pi-ai` provider 配置，保留其他已配置的 provider，然后在 DSH 中选择该 provider 的 `caveman-auto` 模型。示例只展示 provider map 的一部分；如果直接用它完整替换原 map，会移除其他路由。本包不会自动更改模型设置。
+把 [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) 中的 `caveman-auto` provider 加入现有 `llm-pi-ai` 配置，保留其他 provider，然后在 DSH 中选择其 `caveman-auto` 模型。示例只展示 provider map 的一部分；直接用它完整替换 map 会移除其他路由。
 
-登录、启用 routing 并选择 Auto 后，上游代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下 Caveman 可能保留这些内容来改进路由。routing 未启用时，上游代理会回退到 OpenAI 默认模型，仍可能产生模型费用。详见[上游隐私说明](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/security-and-privacy.md)。DSH 到代理的链路已用本地模拟 Cloud 和模型服务测试；本项目尚未验证真实账号。
+选择 Auto 并启用 routing 后，代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下这些内容可能被保留用于改进路由。routing 关闭时，代理回退到 OpenAI 默认模型，仍可能产生模型费用。详见[隐私说明](https://github.com/JuliusBrussee/caveman/blob/main/docs/technical/security-and-privacy.md)。
 
-### 上游 CLI
+### Blocks 和 Browse
 
-本包提供 `dsh-caveman` 命令，把参数和退出状态转发给 `@caveman-ai/cli` 4.1.0。在源码目录可运行 `node scripts/caveman-cli.mjs --help`。这仍是上游 CLI，遵循其设置和账号要求；命令转发不代表所有上游 agent 集成都已原生接入 DSH。
+把 `blocksBinary` 设为 `caveman-blocks` 的绝对路径后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
 
-### Blocks 建议
+把 `browseBinary` 设为 `caveman-browse` 的绝对路径后，DSH MCP manager 会注册 `mcp__caveman_browse__browser_snapshot`、`browser_act`、`browser_eval` 和 `browser_recover`。Browse 默认启动专用的无头 Chrome；工具共享该服务的浏览器状态，可以导航并运行 JavaScript。
 
-要启用上游 Blocks 钩子，请安装兼容的 `caveman-blocks` 程序，并在 profile 行中填写其绝对路径：
+### Cavecrew
 
-```yaml
-- id: caveman
-  config:
-    blocksBinary: '/absolute/path/to/caveman-blocks'
-```
+bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewer` 预设及对应的委派工具。调查和审查角色可读取与搜索；构建角色可读取并编辑最多两个文件路径。这些角色不提供 shell。使用时 profile 需要 agent-preset registry 和进程内 subagent provider。
 
-适配层在执行前把每个 `bash` 或 `pwsh` 命令及其工作目录传给上游 generic 钩子。返回的提示随工具结果提供给模型；它不会拒绝或改写命令。钩子不可用或失败时会被忽略。上游钩子读取本地 `.blocks` 目录，可能在状态目录保存脱敏的脚本记录与使用数据；其遥测遵循[上游设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。本适配层面向本地工作区。
+### 命令行
 
-### Browse
-
-安装兼容的上游 `caveman-browse` 程序，并配置其绝对路径：
-
-```yaml
-- id: caveman
-  config:
-    browseBinary: '/absolute/path/to/caveman-browse'
-```
-
-在提供 `mcpManager` 的 DSH profile 中，插件会在自身生命周期内注册原始 Browse MCP 服务。快照、操作、JavaScript 求值和恢复工具以 `mcp__caveman_browse__*` 名称提供。Browse 默认启动专用的无头 Chrome；浏览器和恢复存储设置由上游服务控制，包括 `CAVEMAN_BROWSE_CHROME`。这些工具共享该服务的浏览器状态，可以导航并运行 JavaScript；它们独立于其他 DSH 浏览器提供方，不会自动拦截其他提供方的结果。
+作为 Node 包安装时，`dsh-caveman` 把参数和退出状态转发给 `@caveman-ai/cli`。在源码目录可运行 `node scripts/caveman-cli.mjs --help`。
 
 -----
 
@@ -157,18 +133,17 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 
 | 路径 | 职责 |
 |---|---|
-| `cordis.patch.yml` | 将宿主行安装到选定 profile。 |
-| `src/index.ts` | 注册技能，并在用户轮次注入会话对应的回答规则。 |
-| `src/skills.ts` | 通过 `ctx.skills` 提供上游技能正文及资源目录。 |
-| `src/mode.ts` | 用上游模式解析器重放用户编写的会话消息。 |
-| `src/stats.ts` | 报告 DSH 会话中已记录的用量，不推断节省量。 |
-| `src/compression.ts` | 调用上游 middleware、检查恢复工具、临时投影符合条件的结果并恢复原始 surface。 |
-| `src/blocks.ts` | 把 shell 调用转发给上游 generic Blocks 钩子并提供提示。 |
-| `scripts/caveman-cli.mjs` | 转发到上游 CLI。 |
-| `upstream/` | 完整公开源码快照及上游许可证、声明。 |
-| `tests/` | 真实 DSH 注册表和会话测试，以及可选的上游代理集成测试。 |
+| `cordis.patch.yml`、`presets/cavecrew.patch.yml` | 组合宿主插件、预设与委派工具。 |
+| `src/index.ts` | 注册技能、会话回答规则和可选集成。 |
+| `src/skills.ts`、`src/mode.ts` | 提供技能正文并解析会话模式切换。 |
+| `src/stats.ts` | 报告已记录的会话用量。 |
+| `src/compression.ts` | 准备可恢复的工具结果投影，并恢复会话 surface。 |
+| `src/blocks.ts` | 为 shell 调用提供 Blocks 建议。 |
+| `src/cavecrew.ts` | 安装 Cavecrew 角色规则并限定工具作用域。 |
+| `scripts/caveman-cli.mjs` | 转发命令行参数。 |
+| `tests/` | 验证 DSH 服务、运行时集成与包安装。 |
 
-适配层只读取用户直接编写的消息来切换模式；注入上下文和被引用的触发词不会切换。压缩结果是引用原始事件的 DSH surface 替换。请求构造后恢复原文；取消或卸载插件时，也会恢复仍在等待的投影。恢复句柄按会话隔离。上游 SDK 默认只允许回环端点，除非显式允许远程内容传输；本包没有开启该选项。
+模式切换只读取用户直接编写的消息。压缩保留原始会话事件，并在清理时恢复等待中的投影；恢复句柄按会话隔离。
 
 </details>
 
@@ -177,34 +152,29 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 <a id="further-exploration"></a>
 ## 延伸阅读
 
-- [上游 Caveman 仓库](https://github.com/JuliusBrussee/caveman) — 原项目、安装与基准。
-- [上游 middleware 协议](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/middleware-protocol.md) — 优化与恢复契约。
-- [上游许可](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/LICENSING.md)与 [NOTICE](NOTICE) — 源码及第三方归属。
-- [实现计划](https://github.com/Lornatang/dsh-caveman/blob/main/docs/superpowers/plans/2026-11-17-dsh-caveman.md) — 尚未完成的对齐工作。
+- [CHANGELOG.md](CHANGELOG.md) — 包的变更。
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — profile 和插件配置。
+- [NOTICE](NOTICE)、[LICENSE](LICENSE) — 许可与归属。
 
 -----
 
 <a id="model-experience"></a>
 ## 模型体验
 
-模型在用户轮次收到所选的上游回答规则。原生工具结果可在模型请求中替换为上游生成的较短结果，并带有 `caveman_retrieve` 句柄；用户提示词本身不会被改写。本 DSH 集成没有声明任何节省比例或质量等价百分比。
+模型在用户轮次收到所选的回答规则。符合条件的工具结果可在模型请求中缩短，并附带 `caveman_retrieve` 句柄；用户提示词本身不会被改写。节省量和质量取决于实际任务，本集成没有对此作量化结论。
 
 #### KV Cache 影响
 
-切换模式以及替换、恢复工具结果 surface 会改变会话历史，可能使缓存前缀失效。实际缓存行为取决于提供方；本集成尚未测量该影响。
+切换回答风格以及替换、恢复工具结果 surface 可能改变缓存前缀。实际缓存行为取决于模型提供方。
 
 <a id="known-limitations-and-deferred-work"></a>
-## 已知限制与后续工作
+## 已知限制
 
-- 这**尚不是完整的 Caveman DSH 移植**。Auto 的自动配置、其他浏览器提供方的结果拦截、缓存保温、上游历史统计和 Cavecrew 预设尚未接入 DSH。
-- Auto 需要手动配置 pi-ai provider、上游代理、Cloud 登录和 OpenAI 凭证；本项目尚未验证真实 Cloud 路由。
-- Browse 需要 DSH MCP manager、单独安装的上游程序和 Chrome；只有配置 `browseBinary` 后才会启动。
-- Blocks 建议需要显式配置上游程序与本地工作区；适配层不会安装 Blocks，也不会配置其他 agent。
-- 原生结果压缩需要单独运行兼容的上游 middleware，默认关闭；目前不压缩 PTC `run_code` 结果或富内容、多块工具结果。
-- 其余 14 个只能由用户显式调用的技能保留原始说明；注册到 DSH 并不表示其外部 CLI、Cloud 或其他 agent 依赖已原生接入 DSH。
-- 离线恢复只从同一 DSH 会话提供精确分页；按文本查询仍需要上游 middleware。
-- 上游托管 Cloud 服务是独立的专有软件，不包含在公开源码快照中。CLI 可按上游账号和条款访问该服务。
-- 项目尚未发布到 npm，也尚未合入 dshmarket 目录。
+- Auto 需要配置 pi-ai provider、Caveman 代理、Cloud 登录和 OpenAI 凭证；集成测试使用本地模拟服务。
+- Browse 需要 MCP manager、`caveman-browse` 和 Chrome；Blocks 需要 `caveman-blocks` 与本地工作区。
+- 原生压缩需要显式启用，处理单文本块的原生工具结果。离线恢复提供精确分页，按文本查询需要 middleware。
+- 13 个技能需要用户显式调用，部分技能还需要额外的 CLI、账号或 agent 配置。
+- Cavecrew 的只读角色使用读取和搜索工具；构建角色可编辑现有文件，限两个文件路径。
 
 <a id="dev-note"></a>
 ### 开发者注记
@@ -212,8 +182,6 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行本地测试。要验证 Auto、middleware、Blocks 和 Browse，请把 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY` 和 `CAVEMAN_BROWSE_BINARY` 分别指向上游 `bin-v4.1.0` 程序，并把 `CAVEMAN_BROWSE_CHROME` 指向 Chrome；Auto 测试还需要 OpenSSL 生成隔离测试证书。未设置相应变量时对应测试会跳过。`npm run test:dsh` 在隔离的 DSH profile 中安装、启动并移除包。`npm pack` 通过 `prepack` 运行测试。DSH 测试使用本地 mock 服务，不测量模型质量或提供方账单。`upstream/` 是参考快照；适配层修改放在根目录 `src/`。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。
 
 </details>
-
-本独立项目与上游作者没有隶属或背书关系。

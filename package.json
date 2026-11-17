@@ -26,6 +26,10 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./cavecrew": {
+      "types": "./lib/types/cavecrew.d.ts",
+      "default": "./lib/cavecrew.js"
+    },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -33,7 +37,9 @@
     "lib",
     "scripts/caveman-cli.mjs",
     "examples",
+    "presets",
     "upstream/skills",
+    "upstream/agents/cavecrew-*.md",
     "upstream/src/hooks",
     "upstream/LICENSE",
     "upstream/LICENSE-MIT",
@@ -43,6 +49,7 @@
     "README.zh.md",
     "CHANGELOG.md",
     "LICENSE",
+    "LICENSE-MIT",
     "NOTICE"
   ],
   "scripts": {
@@ -57,7 +64,10 @@
   },
   "dsh": {
     "bundle": {
-      "patch": "./cordis.patch.yml"
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/cavecrew.patch.yml"
+      ]
     }
   },
   "dependencies": {
@@ -72,15 +82,27 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/cordis-plugin-group": "1.1.0",
     "@deepseek-ai/dsh-agent": "0.2.2-rc.3",
     "@deepseek-ai/dsh-agent-loop": "^0.2.2-rc.3",
+    "@deepseek-ai/dsh-agent-preset": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-fs-local": "0.2.2-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.3",
     "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.3",
     "@deepseek-ai/dsh-mcp-manager": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.2-rc.3",
     "@deepseek-ai/dsh-skill": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-subagent": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.2-rc.3",
     "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.3",
     "@deepseek-ai/dsh-tool-executor-native": "^0.2.2-rc.3",
+    "@deepseek-ai/dsh-tool-fs": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-tool-fs-search": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-tool-subagent": "0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "^0.2.2-rc.3",
+    "@deepseek-ai/dsh-working-directory": "0.2.2-rc.3",
     "@types/node": "^22.18.0",
     "typescript": "^5.9.3"
   },
