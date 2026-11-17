@@ -119,7 +119,9 @@ The plugin looks for each binary in its `CAVEMAN_BLOCKS_BIN` or `CAVEMAN_BROWSE_
 
 ### Cavecrew
 
-The bundle defines the `cavecrew-investigator`, `cavecrew-builder`, and `cavecrew-reviewer` presets and corresponding delegation tools. The investigator and reviewer can read and search; the builder can read and edit up to two file paths. These roles do not expose a shell. They require the profile's agent-preset registry and in-process subagent provider.
+The bundle defines the `cavecrew-investigator`, `cavecrew-builder`, and `cavecrew-reviewer` presets and corresponding delegation tools. The investigator and reviewer can read and search files and inspect Git through `cavecrew_git`; the builder can read and edit up to two file paths. The Git tool provides the read-only operations relevant to each role. They require the profile's agent-preset registry and in-process subagent provider.
+
+Each role inherits its parent provider and model. Set `CAVECREW_INVESTIGATOR_MODEL`, `CAVECREW_BUILDER_MODEL`, or `CAVECREW_REVIEWER_MODEL` before starting DSH to select another model on that provider for the corresponding role.
 
 ### Command-line interface
 
@@ -176,7 +178,7 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 - Browse requires the MCP manager, `caveman-browse`, and Chrome. Blocks requires `caveman-blocks` and a local workspace.
 - Native compression is opt-in and handles single-text-block native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
 - Thirteen skills require explicit user invocation, and some require additional CLI, account, or agent setup.
-- Cavecrew's read-only roles use read and search tools; the builder can edit existing files and is limited to two file paths.
+- Cavecrew's inspection roles use read, search, and read-only Git tools; the builder can edit existing files and is limited to two file paths.
 
 <a id="dev-note"></a>
 ### Dev Note

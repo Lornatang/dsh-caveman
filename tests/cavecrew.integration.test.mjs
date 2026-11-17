@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -34,12 +35,25 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
   const patch = parseYaml(await readFile(new URL('../presets/cavecrew.patch.yml', import.meta.url), 'utf8'))
   const entries = patch.flatMap(item => item.insert ?? [])
   const roles = ['investigator', 'builder', 'reviewer']
+  const modelEnvironment = Object.fromEntries(roles.map(role => {
+    const key = `CAVECREW_${role.toUpperCase()}_MODEL`
+    const previous = process.env[key]
+    process.env[key] = `fixture-${role}`
+    return [key, previous]
+  }))
   assert.deepEqual(entries.filter(item => item.name === '@deepseek-ai/dsh-agent-preset').map(item => item.config.id).sort(),
     roles.map(role => `cavecrew-${role}`).sort())
   assert.deepEqual(entries.filter(item => item.name === '@deepseek-ai/dsh-tool-subagent').map(item => item.config.agentPreset).sort(),
     roles.map(role => `cavecrew-${role}`).sort())
   const ctx = new Context()
   const directory = await mkdtemp(join(tmpdir(), 'dsh-cavecrew-test-'))
+  execFileSync('git', ['init', '-q'], { cwd: directory })
+  await writeFile(join(directory, 'fixture.txt'), 'needle original\n')
+  execFileSync('git', ['add', 'fixture.txt'], { cwd: directory })
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'fixture'], { cwd: directory })
+  execFileSync('git', ['config', 'diff.external', 'nonexistent-external-diff'], { cwd: directory })
+  execFileSync('git', ['config', 'core.fsmonitor', 'nonexistent-fsmonitor'], { cwd: directory })
+  await writeFile(join(directory, 'fixture.txt'), 'needle updated\n')
   ctx.baseUrl = pathToFileURL(join(root, 'package.json')).href
   try {
     await ctx.plugin(Loader)
@@ -52,9 +66,9 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
     await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(LocalFileSystem, { cwd: root })
+    await ctx.plugin(LocalFileSystem, { cwd: directory })
     await ctx.plugin(LocalSubprocessRuntime)
-    await ctx.plugin(WorkingDirectory, { defaultDirectory: root })
+    await ctx.plugin(WorkingDirectory, { defaultDirectory: directory })
     await ctx.plugin(JsonlSessionPersistence, { root: directory })
     await ctx.plugin(AgentPresets, { default: 'cavecrew-investigator' })
     await ctx.plugin(SkillRegistry)
@@ -82,8 +96,9 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
         setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx, `cavecrew-${role}`) },
       })
       const agent = handle.agent
+      assert.equal(agent.model.current().model, `fixture-${role}`, `${role} honors its model override`)
       const visible = ctx.tools.schemas(agent).map(tool => tool.name).sort()
-      const expected = role === 'builder' ? ['edit', 'read'] : ['glob', 'grep', 'read']
+      const expected = role === 'builder' ? ['edit', 'read'] : ['cavecrew_git', 'glob', 'grep', 'read']
       assert.deepEqual(visible, expected, `${role} exposes only its allowed tools`)
       assert.ok(ctx.tools.checkGuards({ name: 'bash', agent, arguments: {} }), `${role} denies shell execution`)
       assert.ok(ctx.tools.checkGuards({ name: 'write', agent, arguments: {} }), `${role} denies file creation`)
@@ -99,6 +114,36 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
         calls: [{ type: 'tool-call', id: 'blocked-shell', name: 'bash', arguments: '{}' }],
       })
       assert.equal(denied.results[0].result.isError, true, 'the executor refuses hidden shell calls')
+      const runGit = async args => {
+        const execution = await ctx.tools.execute({
+          agent, signal: new AbortController().signal,
+          calls: [{ type: 'tool-call', id: `git-${role}`, name: 'cavecrew_git', arguments: JSON.stringify(args) }],
+        })
+        return execution.results[0].result
+      }
+      if (role === 'investigator') {
+        const found = await runGit({ operation: 'grep', query: 'needle', path: 'fixture.txt' })
+        assert.equal(found.isError, false)
+        assert.match(found.content[0].text, /fixture\.txt:1:needle updated/)
+        const log = await runGit({ operation: 'log', query: 'needle' })
+        assert.equal(log.isError, false)
+        assert.match(log.content[0].text, /fixture/)
+        assert.equal((await runGit({ operation: 'show', revision: 'HEAD' })).isError, true)
+      }
+      if (role === 'reviewer') {
+        const diff = await runGit({ operation: 'diff', path: 'fixture.txt' })
+        assert.equal(diff.isError, false)
+        assert.match(diff.content[0].text, /\+needle updated/)
+        const show = await runGit({ operation: 'show', revision: 'HEAD', path: 'fixture.txt' })
+        assert.equal(show.isError, false)
+        assert.match(show.content[0].text, /needle original/)
+        const log = await runGit({ operation: 'log', path: 'fixture.txt' })
+        assert.equal(log.isError, false)
+        assert.match(log.content[0].text, /fixture/)
+        assert.equal((await runGit({ operation: 'show', revision: '--output=escaped.txt' })).isError, true)
+        assert.equal((await runGit({ operation: 'grep', query: 'needle' })).isError, true)
+      }
+      if (role === 'builder') assert.equal((await runGit({ operation: 'diff' })).isError, true)
       const prompt = await ctx.systemPrompt.assemble(assembleContextFor(agent))
       const persona = prompt.sections.find(section => section.name === 'deployment:persona-prefix')
       const original = await readFile(new URL(`../vendor/caveman/agents/cavecrew-${role}.md`, import.meta.url), 'utf8')
@@ -112,6 +157,14 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
     }
     assert.ok(ctx.tools.get('bash'), 'the parent tool scope remains unchanged')
     assert.equal(adapter.requests.length, roles.length)
+    for (const [label, value] of [['blank', '   '], ['control', 'fixture\ninjected']]) {
+      process.env.CAVECREW_REVIEWER_MODEL = value
+      const handle = await ctx.agents.create({
+        sessionId: `cavecrew-reviewer-${label}`, agentOptions: { provider: 'mock', model: 'mock' },
+        setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx, 'cavecrew-reviewer') },
+      })
+      assert.equal(handle.agent.model.current().model, 'mock', `${label} override keeps the inherited model`)
+    }
     await ctx.plugin(SubagentRuntime, {})
     await ctx.plugin(Spawn, { providerName: 'spawn' })
     const investigatorTool = entries.find(item => item.id === 'tool-cavecrew-investigator')
@@ -127,9 +180,13 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
     assert.equal(adapter.requests.length, roles.length + 1)
     const request = adapter.requests.at(-1)
     assert.match(JSON.stringify(request), /Locate\. Report\. Stop\./)
-    assert.deepEqual(request.tools.map(tool => tool.name).sort(), ['glob', 'grep', 'read'])
+    assert.deepEqual(request.tools.map(tool => tool.name).sort(), ['cavecrew_git', 'glob', 'grep', 'read'])
   } finally {
     await ctx.fiber.dispose()
+    for (const [key, previous] of Object.entries(modelEnvironment)) {
+      if (previous === undefined) delete process.env[key]
+      else process.env[key] = previous
+    }
     if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-cavecrew-test-')) throw new Error('unexpected test directory')
     await rm(directory, { recursive: true, force: true, maxRetries: 3 })
   }

@@ -1,5 +1,5 @@
 # Cavecrew agent presets and their in-process delegation tools. The read-only
-# roles do not mount a shell.
+# roles use a read-only Git tool instead of a shell.
 - insert:
     - id: preset-cavecrew-investigator
       name: '@deepseek-ai/dsh-agent-preset'

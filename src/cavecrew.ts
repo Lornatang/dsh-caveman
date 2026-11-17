@@ -5,9 +5,10 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import { registerCavecrewGit } from './cavecrew-git.js'
 
 export const name = 'cavecrew'
-export const inject = ['tools', 'systemPrompt']
+export const inject = ['tools', 'systemPrompt', 'llm']
 export interface Config { role: 'investigator' | 'builder' | 'reviewer' }
 export const Config: z<Config> = z.object({
   role: z.union([z.const('investigator'), z.const('builder'), z.const('reviewer')]).required(),
@@ -27,7 +28,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     name: 'deployment:persona-suffix', order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
     text: '', interpolate: false,
   })
-  const allowed = config.role === 'builder' ? ['read', 'edit'] : ['read', 'glob', 'grep']
+  const allowed = config.role === 'builder' ? ['read', 'edit'] : ['read', 'glob', 'grep', 'cavecrew_git']
+  if (config.role !== 'builder') {
+    const role = config.role
+    ctx.inject(['subprocess', 'workingDirectory'], scoped => registerCavecrewGit(scoped, role))
+    ctx.systemPrompt.section({
+      name: 'cavecrew:git', order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+      text: 'Use cavecrew_git for the permitted Git inspection operations. Use glob and grep for file searches; no shell is available.', interpolate: false,
+    })
+  }
   const permitted = new Set(allowed)
   const edited = new WeakMap<object, Set<string>>()
   ctx.tools.guard(exec => {
@@ -44,9 +53,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     edited.set(exec.agent, paths)
     return undefined
   })
-  ctx.on('agent/created', ({ agent }) => {
+  ctx.on('agent/created', async ({ agent }) => {
     const available = allowed.filter(tool => ctx.tools.get(tool, agent) !== undefined)
     agent.ctx.tools.restrict({ allow: available })
+    const raw = process.env[`CAVECREW_${config.role.toUpperCase()}_MODEL`]
+    const model = raw?.trim()
+    if (model && !/[\x00-\x1f\x7f\u0085\u2028\u2029]/u.test(model)) {
+      const selected = agent.model.current()
+      if (selected) {
+        await ctx.llm.resolveModelInfo(selected.provider, model)
+        agent.model.select({ provider: selected.provider, model })
+      }
+    }
     return undefined
   })
 }

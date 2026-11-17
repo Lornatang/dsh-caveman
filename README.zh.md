@@ -119,7 +119,9 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 ### Cavecrew
 
-bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewer` 预设及对应的委派工具。调查和审查角色可读取与搜索；构建角色可读取并编辑最多两个文件路径。这些角色不提供 shell。使用时 profile 需要 agent-preset registry 和进程内 subagent provider。
+bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewer` 预设及对应的委派工具。调查和审查角色可读取、搜索文件，并通过 `cavecrew_git` 检查仓库；构建角色可读取并编辑最多两个文件路径。Git 工具提供各角色需要的只读操作。使用时 profile 需要 agent-preset registry 和进程内 subagent provider。
+
+各角色默认继承父会话的 provider 和模型。启动 DSH 前可设置 `CAVECREW_INVESTIGATOR_MODEL`、`CAVECREW_BUILDER_MODEL` 或 `CAVECREW_REVIEWER_MODEL`，为对应角色选择该 provider 下的其他模型。
 
 ### 命令行
 
@@ -176,7 +178,7 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 - Browse 需要 MCP manager、`caveman-browse` 和 Chrome；Blocks 需要 `caveman-blocks` 与本地工作区。
 - 原生压缩需要显式启用，处理单文本块的原生工具结果。离线恢复提供精确分页，按文本查询需要 middleware。
 - 13 个技能需要用户显式调用，部分技能还需要额外的 CLI、账号或 agent 配置。
-- Cavecrew 的只读角色使用读取和搜索工具；构建角色可编辑现有文件，限两个文件路径。
+- Cavecrew 的检查角色使用读取、搜索和只读 Git 工具；构建角色可编辑现有文件，限两个文件路径。
 
 <a id="dev-note"></a>
 ### 开发者注记
