@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -12,7 +12,9 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const temp = await mkdtemp(join(tmpdir(), 'dsh-caveman-install-'))
 const executable = process.env.DSH_TEST_EXECUTABLE || 'dsh'
 const prefix = process.env.DSH_TEST_ENTRY ? ['--expose-internals', process.env.DSH_TEST_ENTRY] : []
-const env = { ...process.env, DSH_HOME: join(temp, 'dsh-home') }
+const env = { ...process.env, DSH_HOME: join(temp, 'dsh-home'), CAVEMAN_HOME: join(temp, 'caveman-home') }
+await mkdir(env.CAVEMAN_HOME)
+await writeFile(join(env.CAVEMAN_HOME, 'cloud.json'), JSON.stringify({ modules: { browse: false, scripts: false } }))
 if (process.env.DSH_TEST_ENTRY) env.ELECTRON_RUN_AS_NODE = '1'
 delete env.DSH_PROFILE
 const dsh = args => run(executable, [...prefix, ...args], { env, cwd: temp, timeout: 240000, maxBuffer: 4 * 1024 * 1024, windowsHide: true })

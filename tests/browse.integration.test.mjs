@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
@@ -52,8 +55,13 @@ test('DSH connects the Browse MCP server, snapshots a page, and recovers its ori
   skip: !browseBinary || !chrome, timeout: 120_000,
 }, async () => {
   const ctx = new Context()
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-browse-'))
   const previousEphemeral = process.env.CAVEMAN_BROWSE_EPHEMERAL
+  const previousHome = process.env.CAVEMAN_HOME
+  const previousBinary = process.env.CAVEMAN_BROWSE_BIN
   process.env.CAVEMAN_BROWSE_EPHEMERAL = '1'
+  process.env.CAVEMAN_HOME = directory
+  process.env.CAVEMAN_BROWSE_BIN = browseBinary
   try {
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
@@ -65,7 +73,7 @@ test('DSH connects the Browse MCP server, snapshots a page, and recovers its ori
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(McpManager, {})
-    await ctx.plugin(plugin, { defaultMode: 'manual', browseBinary })
+    await ctx.plugin(plugin, { defaultMode: 'manual' })
     for (let attempt = 0; attempt < 600; attempt++) {
       const status = ctx.mcpManager.list().find(entry => entry.name === 'caveman_browse')?.status
       if (status?.state === 'connected') break
@@ -89,5 +97,76 @@ test('DSH connects the Browse MCP server, snapshots a page, and recovers its ori
     await ctx.fiber.dispose()
     if (previousEphemeral === undefined) delete process.env.CAVEMAN_BROWSE_EPHEMERAL
     else process.env.CAVEMAN_BROWSE_EPHEMERAL = previousEphemeral
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    if (previousBinary === undefined) delete process.env.CAVEMAN_BROWSE_BIN
+    else process.env.CAVEMAN_BROWSE_BIN = previousBinary
+    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-caveman-browse-')) throw new Error('unexpected test directory')
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
+  }
+})
+
+test('an existing Browse server is kept when the plugin is installed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-browse-'))
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = directory
+  await writeFile(join(directory, 'cloud.json'), '{}')
+  const ctx = new Context()
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(McpManager, { servers: { caveman_browse: { transport: 'stdio', command: process.execPath, enabled: false } } })
+    const register = ctx.mcpManager.register.bind(ctx.mcpManager)
+    let attempts = 0
+    ctx.mcpManager.register = (...args) => { attempts++; return register(...args) }
+    const handle = await ctx.plugin(plugin, { defaultMode: 'manual', browseBinary: process.execPath })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    assert.ok(handle, 'plugin starts alongside the existing server')
+    assert.equal(attempts, 0, 'the existing configuration is not replaced')
+    const servers = ctx.mcpManager.list().filter(entry => entry.name === 'caveman_browse')
+    assert.equal(servers.length, 1)
+    assert.equal(servers[0].status.state, 'disabled')
+  } finally {
+    await ctx.fiber.dispose()
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-caveman-browse-')) throw new Error('unexpected test directory')
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
+  }
+})
+
+test('the Browse module switch prevents automatic server registration', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-browse-'))
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = directory
+  await writeFile(join(directory, 'cloud.json'), JSON.stringify({ modules: { browse: false } }))
+  const ctx = new Context()
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(McpManager, {})
+    await ctx.plugin(plugin, { defaultMode: 'manual', browseBinary: process.execPath })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    assert.equal(ctx.mcpManager.list().some(entry => entry.name === 'caveman_browse'), false)
+  } finally {
+    await ctx.fiber.dispose()
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-caveman-browse-')) throw new Error('unexpected test directory')
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
   }
 })

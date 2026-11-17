@@ -77,8 +77,8 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 | `defaultMode` | 由配置决定，未设置时为 `caveman` | 会话的初始回答风格。 |
 | `inputCompression` | `false` | 启用可恢复的原生工具结果压缩。 |
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | middleware 回环地址。 |
-| `blocksBinary` | 未设置 | `caveman-blocks` 可执行文件的绝对路径。 |
-| `browseBinary` | 未设置 | `caveman-browse` 可执行文件的绝对路径；需要 DSH MCP manager。 |
+| `blocksBinary` | 自动查找 | 覆盖 `caveman-blocks` 的绝对路径。 |
+| `browseBinary` | 自动查找 | 覆盖 `caveman-browse` 的绝对路径；需要 DSH MCP manager。 |
 
 ### 回答模式与用量
 
@@ -111,9 +111,11 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 ### Blocks 和 Browse
 
-把 `blocksBinary` 设为 `caveman-blocks` 的绝对路径后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
+安装 `caveman-blocks` 后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
 
-把 `browseBinary` 设为 `caveman-browse` 的绝对路径后，DSH MCP manager 会注册 `mcp__caveman_browse__browser_snapshot`、`browser_act`、`browser_eval` 和 `browser_recover`。Browse 默认启动专用的无头 Chrome；工具共享该服务的浏览器状态，可以导航并运行 JavaScript。
+安装 `caveman-browse` 后，DSH MCP manager 会注册 `mcp__caveman_browse__browser_snapshot`、`browser_act`、`browser_eval` 和 `browser_recover`。Browse 默认启动专用的无头 Chrome；工具共享该服务的浏览器状态，可以导航并运行 JavaScript。
+
+插件依次从 `CAVEMAN_BLOCKS_BIN` 或 `CAVEMAN_BROWSE_BIN`、`PATH`、`$CAVEMAN_HOME/bin`（默认 `~/.caveman/bin`）查找对应程序；profile 中的路径优先。`scripts` 和 `browse` 模块开关在启动时读取，修改后重启 DSH。
 
 ### Cavecrew
 

@@ -37,8 +37,12 @@ test('the Blocks hook adds a hint without changing the shell command or result',
   await mkdir(join(directory, '.blocks'))
   const previousState = process.env.XDG_STATE_HOME
   const previousTracking = process.env.DO_NOT_TRACK
+  const previousHome = process.env.CAVEMAN_HOME
+  const previousBinary = process.env.CAVEMAN_BLOCKS_BIN
   process.env.XDG_STATE_HOME = join(directory, 'state')
   process.env.DO_NOT_TRACK = '1'
+  process.env.CAVEMAN_HOME = join(directory, 'home')
+  process.env.CAVEMAN_BLOCKS_BIN = blocksBinary
   const ctx = new Context()
   try {
     await ctx.plugin(LlmRuntime)
@@ -50,7 +54,7 @@ test('the Blocks hook adds a hint without changing the shell command or result',
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SkillRegistry)
-    await ctx.plugin(plugin, { defaultMode: 'manual', blocksBinary })
+    await ctx.plugin(plugin, { defaultMode: 'manual' })
     let received
     ctx.tools.register(defineTool({
       name: 'bash', description: 'Test shell.',
@@ -73,6 +77,10 @@ test('the Blocks hook adds a hint without changing the shell command or result',
     else process.env.XDG_STATE_HOME = previousState
     if (previousTracking === undefined) delete process.env.DO_NOT_TRACK
     else process.env.DO_NOT_TRACK = previousTracking
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    if (previousBinary === undefined) delete process.env.CAVEMAN_BLOCKS_BIN
+    else process.env.CAVEMAN_BLOCKS_BIN = previousBinary
     if (dirname(resolve(directory)) !== resolve(tmpdir()) || !directory.includes('dsh-caveman-blocks-')) throw new Error('unexpected test directory')
     await rm(directory, { recursive: true, force: true, maxRetries: 3 })
   }

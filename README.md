@@ -77,8 +77,8 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 | `defaultMode` | Configuration-derived, otherwise `caveman` | Starting voice for a session. |
 | `inputCompression` | `false` | Enable recoverable native tool-result compression. |
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | Loopback middleware address. |
-| `blocksBinary` | unset | Absolute path to `caveman-blocks`. |
-| `browseBinary` | unset | Absolute path to `caveman-browse`; requires the DSH MCP manager. |
+| `blocksBinary` | auto-detected | Override the absolute path to `caveman-blocks`. |
+| `browseBinary` | auto-detected | Override the absolute path to `caveman-browse`; requires the DSH MCP manager. |
 
 ### Voice and usage
 
@@ -111,9 +111,11 @@ When Auto is selected and routing is enabled, the proxy sends the latest and pre
 
 ### Blocks and Browse
 
-Set `blocksBinary` to the absolute path of `caveman-blocks` to receive suggestions for `bash` and `pwsh` calls. Suggestions accompany the result and do not change the command. Blocks reads the local `.blocks` directory and may save scrubbed script observations and usage data; see its [telemetry settings](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md).
+When `caveman-blocks` is installed, `bash` and `pwsh` calls can receive Blocks suggestions. Suggestions accompany the result and do not change the command. Blocks reads the local `.blocks` directory and may save scrubbed script observations and usage data; see its [telemetry settings](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md).
 
-Set `browseBinary` to the absolute path of `caveman-browse` to register `mcp__caveman_browse__browser_snapshot`, `browser_act`, `browser_eval`, and `browser_recover` through the DSH MCP manager. Browse starts a dedicated headless Chrome by default. Its tools share the server's browser state and can navigate and run JavaScript.
+When `caveman-browse` is installed, the DSH MCP manager registers `mcp__caveman_browse__browser_snapshot`, `browser_act`, `browser_eval`, and `browser_recover`. Browse starts a dedicated headless Chrome by default. Its tools share the server's browser state and can navigate and run JavaScript.
+
+The plugin looks for each binary in its `CAVEMAN_BLOCKS_BIN` or `CAVEMAN_BROWSE_BIN` override, on `PATH`, then in `$CAVEMAN_HOME/bin` (or `~/.caveman/bin`). Profile paths take precedence. The `scripts` and `browse` module switches are read on startup; restart DSH after changing them.
 
 ### Cavecrew
 

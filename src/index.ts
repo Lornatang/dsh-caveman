@@ -1,5 +1,4 @@
 import { fileURLToPath } from 'node:url'
-import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -12,6 +11,7 @@ import { defaultModeFor, resolveMode, type DefaultMode, type VoiceMode } from '.
 import { registerCompression } from './compression.js'
 import { registerBlocks } from './blocks.js'
 import { sessionStats } from './stats.js'
+import { findCavemanBinary, moduleEnabled } from './runtime.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -39,12 +39,14 @@ export function apply(ctx: Context, config: Config = {}): void {
   const root = fileURLToPath(new URL('../vendor/caveman/skills/', import.meta.url))
   ctx.skills.registerProvider(control => createSkillProvider(root, control))
   if (config.inputCompression) registerCompression(ctx, config.middlewareEndpoint ?? 'http://127.0.0.1:8787')
-  if (config.blocksBinary) registerBlocks(ctx, config.blocksBinary)
-  if (config.browseBinary) {
-    if (!isAbsolute(config.browseBinary)) throw new Error('dsh-caveman: browseBinary must be an absolute path')
-    const binary = config.browseBinary
+  const blocks = moduleEnabled('scripts') ? findCavemanBinary('blocks', config.blocksBinary) : undefined
+  if (blocks) registerBlocks(ctx, blocks)
+  const browse = moduleEnabled('browse') ? findCavemanBinary('browse', config.browseBinary) : undefined
+  if (browse) {
     ctx.inject(['mcpManager'], scoped => {
-      scoped.mcpManager.register('caveman_browse', { transport: 'stdio', command: binary, args: [] })
+      if (!scoped.mcpManager.list().some(entry => entry.name === 'caveman_browse' && entry.configured)) {
+        scoped.mcpManager.register('caveman_browse', { transport: 'stdio', command: browse, args: [] })
+      }
     })
   }
   ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
