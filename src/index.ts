@@ -15,6 +15,7 @@ import { statsReport } from './stats.js'
 import { findCavemanBinary, guardedRuntimeFetch, runtimeSettings, verifiedRuntime } from './runtime.js'
 import { registerMemoryRecovery } from './memory.js'
 import { registerAttribution } from './attribution.js'
+import { registerNative } from './native.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -45,6 +46,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const modes = new SessionModeTracker()
   const settings = runtimeSettings()
   registerAttribution(ctx, config.middlewareEndpoint ?? 'http://127.0.0.1:8787')
+  registerNative(ctx, config.middlewareEndpoint ?? 'http://127.0.0.1:8787', { mode: settings.nativeMode, profile: settings.nativeProfile, core: settings.core })
   if (settings.core) {
     let core = readFileSync(new URL('../vendor/caveman/skills/native/native-core.md', import.meta.url), 'utf8').trim()
     if (settings.coreLeanBuild) {

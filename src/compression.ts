@@ -41,7 +41,7 @@ function textBlocks(event: SessionEvent): { index: number; text: string }[] {
   return event.data.message.content.flatMap((block, index) => block.type === 'text' ? [{ index, text: block.text }] : [])
 }
 
-function isManagedTool(name: string): boolean {
+export function isManagedTool(name: string): boolean {
   return name === 'caveman_retrieve' || name === 'cavemem_recover' || name.startsWith('mcp__caveman__') || name.startsWith('mcp__caveman_browse__') || name.startsWith('mcp__cavemem__') ||
     /^mcp__.+__(?:caveman_retrieve|browser_recover)$/u.test(name)
 }

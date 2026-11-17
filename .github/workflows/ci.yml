@@ -49,7 +49,7 @@ jobs:
           curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/cavemem_linux_amd64 -o "$RUNNER_TEMP/cavemem"
           echo "ef11cb6d070a2217853330df19a842a2a94cb712bc2ae1a2fb1137e292e2653b  $RUNNER_TEMP/cavemem" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/cavemem"
-      - run: node --test tests/auto.integration.test.mjs tests/cli.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs tests/mcp.integration.test.mjs tests/memory.integration.test.mjs
+      - run: node --test tests/auto.integration.test.mjs tests/cli.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs tests/mcp.integration.test.mjs tests/memory.integration.test.mjs tests/native.integration.test.mjs
         env:
           CAVEMAN_PROXY_BINARY: ${{ runner.temp }}/caveman-proxy
           CAVEMAN_BLOCKS_BINARY: ${{ runner.temp }}/caveman-blocks

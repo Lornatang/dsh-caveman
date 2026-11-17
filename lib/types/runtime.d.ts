@@ -11,6 +11,8 @@ export declare function runtimeSettings(env?: NodeJS.ProcessEnv): {
     memory: boolean;
     core: boolean;
     coreLeanBuild: boolean;
+    nativeMode: 'record' | 'safe' | 'max';
+    nativeProfile: string;
 };
 /** Modules default to on; a saved explicit off is respected. */
 export declare function moduleEnabled(kind: Module, env?: NodeJS.ProcessEnv): boolean;

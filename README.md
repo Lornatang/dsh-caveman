@@ -91,7 +91,7 @@ Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, 
 
 `defaultMode` accepts `caveman`, `ultracave`, `megacave`, `manual`, or `off`. An explicit profile value wins; otherwise the resolver checks `CAVEMAN_DEFAULT_MODE`, project configuration, and user configuration before falling back to `caveman`.
 
-The native coding policy is included in the system prompt when the output module and Core are active. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables it; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
+The native coding policy is included in the system prompt when the output module and Core are active. When the local runtime is running, it also supplies task-specific rules, maintains state across compaction, and can suggest reusing a verified unchanged file observation. Recovery references are shown only when the recovery MCP tool is available. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables the active rules; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
 
 `/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for recently active sessions, and `--share` for a concise current-session report. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
 
@@ -207,6 +207,6 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 <details>
 <summary>Maintainer context</summary>
 
-`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_MCP_BINARY`, `CAVEMEM_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
+`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_MCP_BINARY`, `CAVEMEM_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and incremental session processing on synthetic input.
 
 </details>

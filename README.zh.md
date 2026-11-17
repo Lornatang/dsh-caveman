@@ -91,7 +91,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 `defaultMode` 可设为 `caveman`、`ultracave`、`megacave`、`manual` 或 `off`。profile 的显式配置优先；否则依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
 
-output 模块和 Core 启用时，原生编码规则会加入系统提示词。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
+output 模块和 Core 启用时，原生编码规则会加入系统提示词。本地运行时启动后，还会提供任务规则、衔接压缩前后的状态，并在文件确定未变化时提示复用已有观察；只有恢复 MCP 工具可用时才会展示恢复引用。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭活动规则；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
 
 `/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看近期活跃的会话，使用 `--share` 生成简短的当前会话报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
 
@@ -207,6 +207,6 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_MCP_BINARY`、`CAVEMEM_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_MCP_BINARY`、`CAVEMEM_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话增量处理。
 
 </details>

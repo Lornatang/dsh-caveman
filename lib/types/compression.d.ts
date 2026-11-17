@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { Session, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh-session';
+export declare function isManagedTool(name: string): boolean;
 interface CompressionHistory {
     seq: SessionLogOffset;
     toolNames: Map<string, string>;
