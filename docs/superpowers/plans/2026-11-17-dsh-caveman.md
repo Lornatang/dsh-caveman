@@ -33,3 +33,12 @@
 - [ ] Produce bilingual installation and limitations documentation, package metadata, CI, and a verified installable tarball.
 - [ ] Verify actual DSH integration and the full requirement matrix; publish npm only after parity succeeds.
 - [ ] Submit the market catalog entry and report its age/review status accurately.
+
+## Current status
+
+- The public upstream snapshot is pinned and byte- and mode-verified. The DSH adapter exposes all original skill bodies for explicit invocation and eight for model invocation.
+- Voice modes, current-session usage, recoverable native tool-result compression, the Blocks hook, and Browse MCP have focused DSH tests. Auto can be configured manually through the upstream proxy; a local mock Cloud and provider verify the complete DSH route. A real Cloud account has not been tested.
+- The install smoke test adds, boots, and removes the packed bundle in an isolated profile. The package is not published to npm.
+- Remaining parity includes automatic Auto setup, integration with other browser providers, cache warming, upstream historical statistics, Cavecrew presets, and other upstream host-specific behavior. Inspect the source and DSH service contracts before claiming or publishing full parity.
+- `npm audit --omit=dev` reported no vulnerabilities; the separately installed DSH development dependencies reported advisories and need rechecking before release.
+- The dshmarket submission is scheduled for after the repository's 24-hour age threshold and must also wait for successful implementation, verification, and npm publication.

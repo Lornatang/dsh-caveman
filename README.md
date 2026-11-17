@@ -113,11 +113,11 @@ Only successful native tool results with a single text block of at least 2048 UT
 
 ### Auto model selection
 
-Auto can be used through a manually configured DSH pi-ai provider and the original Caveman proxy. Install the [upstream CLI](upstream/packages/cli/README.md), sign in with `caveman login`, ensure its `routing` module is on, and start its local proxy with `caveman start`. An OpenAI API key must be available to DSH as `OPENAI_API_KEY` through its credentials provider or environment.
+Auto can be used through a manually configured DSH pi-ai provider and the original Caveman proxy. Install the [upstream CLI](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/packages/cli/README.md), sign in with `caveman login`, ensure its `routing` module is on, and start its local proxy with `caveman start`. An OpenAI API key must be available to DSH as `OPENAI_API_KEY` through its credentials provider or environment.
 
 Add the `caveman-auto` entry from [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) to the existing `llm-pi-ai` provider configuration, preserving any other configured providers. Select the `caveman-auto` model on that provider in DSH. The example is a provider-map excerpt; applying it as a complete replacement without the existing providers can remove those routes. This package does not change model settings automatically.
 
-When signed in with routing enabled and Auto selected, the upstream proxy sends the latest and previous user asks, the tail of the last assistant response, and request facts to Caveman Cloud for model selection. On the Free plan, Caveman may retain them to improve routing. Without routing, the upstream proxy falls back to its OpenAI default model; provider billing still applies. See [upstream privacy details](upstream/docs/technical/security-and-privacy.md). The DSH-to-proxy path is tested with local mock Cloud and provider servers; a live account has not been tested here.
+When signed in with routing enabled and Auto selected, the upstream proxy sends the latest and previous user asks, the tail of the last assistant response, and request facts to Caveman Cloud for model selection. On the Free plan, Caveman may retain them to improve routing. Without routing, the upstream proxy falls back to its OpenAI default model; provider billing still applies. See [upstream privacy details](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/security-and-privacy.md). The DSH-to-proxy path is tested with local mock Cloud and provider servers; a live account has not been tested here.
 
 ### Upstream CLI
 
@@ -178,9 +178,9 @@ The adapter reads only direct user messages for mode switches; injected contexts
 ## Further Exploration
 
 - [Upstream Caveman repository](https://github.com/JuliusBrussee/caveman) — original product, installation, and benchmarks.
-- [Upstream middleware protocol](upstream/docs/technical/middleware-protocol.md) — optimization and recovery contract.
-- [Upstream licensing](upstream/LICENSING.md) and [NOTICE](NOTICE) — source and third-party attribution.
-- [Implementation plan](docs/superpowers/plans/2026-11-17-dsh-caveman.md) — remaining parity work.
+- [Upstream middleware protocol](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/middleware-protocol.md) — optimization and recovery contract.
+- [Upstream licensing](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/LICENSING.md) and [NOTICE](NOTICE) — source and third-party attribution.
+- [Implementation plan](https://github.com/Lornatang/dsh-caveman/blob/main/docs/superpowers/plans/2026-11-17-dsh-caveman.md) — remaining parity work.
 
 -----
 

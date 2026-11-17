@@ -113,11 +113,11 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 
 ### Auto 自动选模
 
-通过手动配置 DSH pi-ai provider 和原始 Caveman 代理，可以使用 Auto。先安装[上游 CLI](upstream/packages/cli/README.md)，运行 `caveman login` 登录，确保 `routing` 模块开启，再用 `caveman start` 启动本地代理。DSH 还需通过凭证服务或环境变量提供 `OPENAI_API_KEY`。
+通过手动配置 DSH pi-ai provider 和原始 Caveman 代理，可以使用 Auto。先安装[上游 CLI](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/packages/cli/README.md)，运行 `caveman login` 登录，确保 `routing` 模块开启，再用 `caveman start` 启动本地代理。DSH 还需通过凭证服务或环境变量提供 `OPENAI_API_KEY`。
 
 把 [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) 中的 `caveman-auto` 条目加入现有 `llm-pi-ai` provider 配置，保留其他已配置的 provider，然后在 DSH 中选择该 provider 的 `caveman-auto` 模型。示例只展示 provider map 的一部分；如果直接用它完整替换原 map，会移除其他路由。本包不会自动更改模型设置。
 
-登录、启用 routing 并选择 Auto 后，上游代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下 Caveman 可能保留这些内容来改进路由。routing 未启用时，上游代理会回退到 OpenAI 默认模型，仍可能产生模型费用。详见[上游隐私说明](upstream/docs/technical/security-and-privacy.md)。DSH 到代理的链路已用本地模拟 Cloud 和模型服务测试；本项目尚未验证真实账号。
+登录、启用 routing 并选择 Auto 后，上游代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下 Caveman 可能保留这些内容来改进路由。routing 未启用时，上游代理会回退到 OpenAI 默认模型，仍可能产生模型费用。详见[上游隐私说明](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/security-and-privacy.md)。DSH 到代理的链路已用本地模拟 Cloud 和模型服务测试；本项目尚未验证真实账号。
 
 ### 上游 CLI
 
@@ -178,9 +178,9 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 ## 延伸阅读
 
 - [上游 Caveman 仓库](https://github.com/JuliusBrussee/caveman) — 原项目、安装与基准。
-- [上游 middleware 协议](upstream/docs/technical/middleware-protocol.md) — 优化与恢复契约。
-- [上游许可](upstream/LICENSING.md)与 [NOTICE](NOTICE) — 源码及第三方归属。
-- [实现计划](docs/superpowers/plans/2026-11-17-dsh-caveman.md) — 尚未完成的对齐工作。
+- [上游 middleware 协议](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/docs/technical/middleware-protocol.md) — 优化与恢复契约。
+- [上游许可](https://github.com/JuliusBrussee/caveman/blob/9b243662ff98d392bc0a95b865a554583d71be75/LICENSING.md)与 [NOTICE](NOTICE) — 源码及第三方归属。
+- [实现计划](https://github.com/Lornatang/dsh-caveman/blob/main/docs/superpowers/plans/2026-11-17-dsh-caveman.md) — 尚未完成的对齐工作。
 
 -----
 
