@@ -108,16 +108,21 @@ export function registerCompression(ctx: Context, endpoint: string): void {
     const key = String(session.id)
     const work = pending.get(key)
     if (!work || work.session !== session) return []
-    pending.delete(key)
     const restored: Optimization[] = []
-    for (const replacement of work.replacements) {
-      if (!session.surface.nodes.includes(replacement.seq)) continue
-      session.append('tool/result', replacement.original.data, {
-        surfaceOp: { op: 'replace', startSeq: replacement.seq, endSeq: replacement.seq },
-        sourceEventSeqs: [replacement.seq, replacement.original.seq],
-      })
-      restored.push(replacement.optimization)
+    while (work.replacements.length) {
+      const replacement = work.replacements[0]!
+      if (session.surface.nodes.includes(replacement.seq)) {
+        session.append('tool/result', replacement.original.data, {
+          surfaceOp: { op: 'replace', startSeq: replacement.seq, endSeq: replacement.seq },
+          sourceEventSeqs: [replacement.seq, replacement.original.seq],
+        })
+        restored.push(replacement.optimization)
+      }
+      // Retain the current item until append succeeds so idle/disposal can
+      // retry a transient restoration error without stranding the projection.
+      work.replacements.shift()
     }
+    pending.delete(key)
     return restored
   }
   const tool: ToolDefinition = {

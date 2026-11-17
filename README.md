@@ -27,24 +27,62 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-### Current development installation
+Install the bundle into the profile whose sessions should use Caveman. Node.js 22.19 or newer and DSH 0.2.2-rc.3 or newer are required.
 
-Node.js 22.19 or newer and DSH 0.2.2-rc.3 or newer are required. This is a development build, not an npm release:
+### Install into a profile
+
+After the npm release, install and remove the package with:
+
+```text
+dsh plugin --profile <name> add @lornatang/dsh-caveman
+dsh plugin --profile <name> remove @lornatang/dsh-caveman
+```
+
+The package has not been published yet, so the npm `add` command is not available today. To try the current development build, pack the repository and add the resulting local tarball:
 
 ```sh
 git clone https://github.com/Lornatang/dsh-caveman.git
 cd dsh-caveman
 npm ci
-npm test
 npm pack
 dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 ```
 
-The bundle inserts a `caveman` row. Restart the profile after installing or removing it. The intended published package name is `@lornatang/dsh-caveman`.
+The `add` command composes the bundle into the profile: `cordis.patch.yml` inserts a row with id `caveman`, and `package.json` declares the patch through `dsh.bundle.patch`. With no row configuration, the plugin uses the upstream voice-mode default and leaves compression, Blocks, and Browse disabled. Restart DSH after `add` or `remove`, because the row is composed when the profile loads.
+
+### What you get
+
+| Surface | Provided by |
+|---|---|
+| Original Caveman skills and per-session voice instructions | host entry, `src/skills.ts` and `src/mode.ts` |
+| `/caveman-stats` for recorded current-session usage | host entry, `src/stats.ts` |
+| Recoverable native tool-result compression and `caveman_retrieve`, when enabled | host entry, `src/compression.ts` and the upstream middleware |
+| Shell-command suggestions, when Blocks is configured | host entry, `src/blocks.ts` and the upstream Blocks hook |
+| `mcp__caveman_browse__*` tools, when Browse is configured | DSH MCP manager and the upstream Browse server |
+| `dsh-caveman` command when installed as a Node package | `scripts/caveman-cli.mjs` and the upstream CLI |
+
+### Configuration
+
+The bundle ships a `caveman` row without configuration. Add a row override to the profile's `cordis.patch.yml` for the fields you want to change:
+
+```yaml
+# $DSH_HOME/profiles/<name>/cordis.patch.yml
+- id: caveman
+  config:
+    defaultMode: manual
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `defaultMode` | upstream configuration, otherwise `caveman` | Initial voice mode for each session. |
+| `inputCompression` | `false` | Enable recoverable native tool-result compression. |
+| `middlewareEndpoint` | `http://127.0.0.1:8787` | Upstream middleware endpoint; only loopback is enabled. |
+| `blocksBinary` | unset | Absolute path to an upstream Blocks executable. |
+| `browseBinary` | unset | Absolute path to an upstream Browse executable; requires DSH's MCP manager. |
 
 ### Voice and commands
 
-The default mode is `caveman`. `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, `/caveman status`, and `stop caveman` use the upstream parser. A mode belongs to one DSH session. The original `caveman`, `ultracave`, `megacave`, `caveman-help`, `caveman-commit`, `caveman-review`, `caveman-compress`, and `caveman-stats` skills are available through DSH's skill registry. `caveman-compress` also needs the Python and model-provider setup described in its upstream skill.
+The default mode is `caveman`. `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, `/caveman status`, and `stop caveman` use the upstream parser. A mode belongs to one DSH session. All 22 original skill bodies are available for explicit invocation. The model can also invoke `caveman`, `ultracave`, `megacave`, `caveman-help`, `caveman-commit`, `caveman-review`, `caveman-compress`, and `caveman-stats`; the remaining skills are user-invocable only. Some skills refer to upstream CLI commands, accounts, or other agent integrations that require separate setup. `caveman-compress` also needs the Python and model-provider setup described in its upstream skill.
 
 The bundle's profile row can choose a startup mode:
 
@@ -55,6 +93,8 @@ The bundle's profile row can choose a startup mode:
 ```
 
 The values are `caveman`, `ultracave`, `megacave`, `manual`, and `off`. `manual` starts with normal replies and permits explicit activation; `off` uses the upstream off-default behavior. An explicit profile value takes precedence. Without one, the upstream resolver checks `CAVEMAN_DEFAULT_MODE`, project configuration, and user configuration, in that order, and otherwise selects `caveman`.
+
+`/caveman-stats` reports usage attached to committed assistant messages in the current DSH session. It states how many messages included usage, excludes uncommitted attempts, and marks savings as unknown. Historical or sharing options from the Claude Code implementation are not supported.
 
 ### Recoverable tool-result compression
 
@@ -112,6 +152,7 @@ On a DSH profile with `mcpManager`, the plugin registers the original Browse MCP
 | `src/index.ts` | Registers skills and injects per-session voice instructions on user turns. |
 | `src/skills.ts` | Serves original skill bodies and their resource directories through `ctx.skills`. |
 | `src/mode.ts` | Replays user-authored session messages through the upstream mode parser. |
+| `src/stats.ts` | Reports recorded DSH session usage without inferring savings. |
 | `src/compression.ts` | Calls upstream middleware, checks recovery-tool visibility, temporarily projects eligible tool results, and restores their original surface. |
 | `src/blocks.ts` | Forwards shell calls to the upstream generic Blocks hook and delivers its hint. |
 | `scripts/caveman-cli.mjs` | Forwards to the upstream CLI without embedding a second copy. |
@@ -146,11 +187,11 @@ Changing mode or replacing and restoring a tool-result surface changes session h
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
-- This is **not yet a complete DSH port** of Caveman. Auto model routing, interception of other browser providers, cache warming, upstream statistics, and Cavecrew presets are not integrated into DSH.
+- This is **not yet a complete DSH port** of Caveman. Auto model routing, interception of other browser providers, cache warming, upstream historical statistics, and Cavecrew presets are not integrated into DSH.
 - Browse requires the DSH MCP manager and a separately installed upstream binary and Chrome; it starts only when `browseBinary` is configured.
 - Blocks suggestions require an explicitly configured upstream binary and a local workspace; the adapter does not install Blocks or configure other agents.
 - Native compression requires an independently running compatible upstream middleware service. It is disabled by default and currently does not shorten PTC `run_code` or rich/multiblock tool results.
-- Only the eight skills listed above are registered in DSH; other original skills are present in `upstream/` but are not advertised as working DSH integrations.
+- The 14 user-invocable-only skills retain their original instructions; availability in the registry does not make their external CLI, Cloud, or other-agent dependencies native to DSH.
 - Offline recovery serves exact pages from the same DSH session; text-query recovery still requires the upstream middleware.
 - The upstream hosted Cloud service is separate proprietary software and is not included in the public snapshot. The CLI can access the upstream service under its own account and terms.
 - The project has not been published to npm or merged into the dshmarket catalog.

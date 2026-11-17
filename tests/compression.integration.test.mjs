@@ -84,7 +84,7 @@ class LocalAdapter extends LlmAdapter {
   }
 }
 
-async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false) {
+async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRestoreOnce = false) {
   const service = await startProxy()
   const ctx = new Context()
   try {
@@ -107,8 +107,25 @@ async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false) {
     ctx.llm.registerAdapter(['mock'], adapter)
     const agent = await ctx.agentLoop.create('compression-session', { provider: 'mock', model: 'mock' })
     if (denyRecovery) agent.ctx.get('tools').restrict({ deny: ['caveman_retrieve'] })
+    let restoreFailed = false
+    if (failRestoreOnce) {
+      const append = agent.session.append.bind(agent.session)
+      agent.session.append = (type, data, options) => {
+        if (!restoreFailed && type === 'tool/result' && options?.sourceEventSeqs?.length === 2) {
+          restoreFailed = true
+          throw new Error('injected transient restore failure')
+        }
+        return append(type, data, options)
+      }
+    }
     agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the sample.' }] }))
     await agent.whenIdle()
+    if (failRestoreOnce) {
+      assert.ok(restoreFailed, 'the test exercised a failed restoration')
+      const visible = agent.session.surface.nodes.map(seq => agent.session.eventAt(seq))
+      assert.ok(visible.some(event => event.type === 'tool/result' && event.data.message.toolCallId === 'output-call' && event.data.message.content[0]?.text === original), 'idle cleanup retries restoration after a transient failure')
+      return
+    }
     if (denyRecovery) {
       assert.equal(adapter.requests.length, 2)
       const visible = adapter.requests[1].messages.filter(message => message.role === 'tool').at(-1).content[0].text
@@ -139,4 +156,8 @@ test('the original remains recoverable from the session if the proxy stops', { s
 
 test('a restricted recovery tool prevents shortening', { skip: !proxyBinary }, async () => {
   await exerciseRecovery(false, true)
+})
+
+test('a transient restore error does not strand compressed content on the session surface', { skip: !proxyBinary }, async () => {
+  await exerciseRecovery(false, false, true)
 })

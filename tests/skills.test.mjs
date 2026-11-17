@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
@@ -34,6 +34,36 @@ test('the DSH skill registry serves the unmodified upstream voice and its resour
   } finally {
     dispose()
     assert.equal((await ctx.skills.list()).length, 0)
+    await ctx.fiber.dispose()
+  }
+})
+
+test('every upstream skill is available to an explicit user invocation', async () => {
+  const module = await providerModule()
+  const ctx = new Context()
+  await ctx.plugin(SkillRegistry)
+  const dispose = ctx.skills.registerProvider(() => module.createSkillProvider(root))
+  try {
+    const entries = await readdir(root, { withFileTypes: true })
+    const catalog = await ctx.skills.list()
+    let expected = 0
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      let original
+      try { original = await readFile(new URL(`../upstream/skills/${entry.name}/SKILL.md`, import.meta.url), 'utf8') } catch (error) {
+        if (error.code === 'ENOENT') continue
+        throw error
+      }
+      expected++
+      const item = catalog.find(candidate => candidate.name === entry.name)
+      assert.ok(item?.invocation.userInvocable, `${entry.name} accepts explicit invocation`)
+      const skill = await ctx.skills.get(entry.name)
+      assert.equal(skill.content, original.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '').trim())
+    }
+    assert.equal(catalog.length, expected)
+    assert.equal(catalog.find(item => item.name === 'caveman-setup').invocation.modelInvocable, false)
+  } finally {
+    dispose()
     await ctx.fiber.dispose()
   }
 })

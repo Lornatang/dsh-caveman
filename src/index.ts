@@ -10,10 +10,12 @@ import { createSkillProvider } from './skills.js'
 import { defaultModeFor, resolveMode, type DefaultMode, type VoiceMode } from './mode.js'
 import { registerCompression } from './compression.js'
 import { registerBlocks } from './blocks.js'
+import { sessionStats } from './stats.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'dsh-caveman-mode': { kind: 'dsh-caveman-mode'; form: 'instructions'; mode: VoiceMode }
+    'dsh-caveman-stats': { kind: 'dsh-caveman-stats'; form: 'notice' }
   }
 }
 
@@ -50,6 +52,18 @@ export function apply(ctx: Context, config: Config = {}): void {
     const directMessages = decision.messages.filter(message => message.source.kind === 'user')
     if (directMessages.length === 0) return decision
     signal.throwIfAborted()
+    const statsRequest = directMessages.map(message => message.content
+      .filter(block => block.type === 'text').map(block => block.text).join('\n'))
+      .map(text => /^\/caveman(?::caveman)?-stats(?:\s+(.*))?$/u.exec(text.trim()))
+      .reverse().find(match => match !== null)
+    if (statsRequest) {
+      const report = sessionStats(agent.session.snapshotEvents(), statsRequest[1]?.trim() ?? '')
+      const reminder = createUserMessage({
+        source: { kind: 'dsh-caveman-stats', form: 'notice' },
+        content: [{ type: 'text', text: `Print this report verbatim in a fenced code block. Do not infer savings.\n\n${report}` }],
+      })
+      return { ...decision, messages: [...decision.messages, reminder] }
+    }
     const directory = ctx.get('workingDirectory') as { ensure(agent: Agent, signal: AbortSignal): Promise<string> } | undefined
     const cwd = directory ? await directory.ensure(agent, signal) : agent.session.header.cwd
     const selected = resolveMode(defaultModeFor(config.defaultMode, cwd), agent.session.snapshotEvents(), directMessages)

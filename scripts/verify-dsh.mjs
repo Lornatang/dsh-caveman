@@ -23,6 +23,13 @@ const npm = args => npmCli
   : run('npm', args, { env, cwd: root, timeout: 60000, maxBuffer: 4 * 1024 * 1024 })
 let server
 let output = ''
+async function stopServer() {
+  if (!server || server.exitCode !== null || server.signalCode !== null) return
+  const exited = new Promise(resolve => server.once('exit', resolve))
+  server.kill()
+  await Promise.race([exited, delay(5000)])
+  if (server.exitCode === null && server.signalCode === null) { server.kill('SIGKILL'); await exited }
+}
 try {
   const version = (await dsh(['--version'])).stdout.trim()
   assert.ok(version, 'DSH did not report a version')
@@ -51,18 +58,17 @@ try {
   assert.ok(launch, 'DSH did not start the installed profile')
   const response = await fetch(new URL(launch).origin, { redirect: 'manual', signal: AbortSignal.timeout(10000) })
   assert.ok(response.status < 500, `DSH returned HTTP ${response.status}`)
-  console.log(`DSH ${version}: packed bundle installed, composed, and booted in an isolated profile.`)
+  await stopServer()
+  await dsh(['plugin', '--profile', 'caveman-test', 'remove', '@lornatang/dsh-caveman'])
+  const removed = (await dsh(['--profile', 'caveman-test', '--dump-config'])).stdout
+  assert.ok(!removed.includes('@lornatang/dsh-caveman'), 'bundle was not removed from the profile')
+  console.log(`DSH ${version}: packed bundle installed, composed, booted, and removed in an isolated profile.`)
 } catch (error) {
   const diagnostics = output.split('\n').filter(line => /caveman|warning|error/i.test(line) && !/token|https?:\/\//i.test(line)).slice(-20)
   if (diagnostics.length) process.stderr.write(diagnostics.join('\n') + '\n')
   throw error
 } finally {
-  if (server && server.exitCode === null && server.signalCode === null) {
-    const exited = new Promise(resolve => server.once('exit', resolve))
-    server.kill()
-    await Promise.race([exited, delay(5000)])
-    if (server.exitCode === null && server.signalCode === null) { server.kill('SIGKILL'); await exited }
-  }
+  await stopServer()
   if (dirname(resolve(temp)) !== resolve(tmpdir()) || !temp.includes('dsh-caveman-install-')) throw new Error('unexpected test directory')
   await rm(temp, { recursive: true, force: true, maxRetries: 3 })
 }

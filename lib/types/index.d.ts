@@ -8,6 +8,10 @@ declare module '@deepseek-ai/dsh-llm' {
             form: 'instructions';
             mode: VoiceMode;
         };
+        'dsh-caveman-stats': {
+            kind: 'dsh-caveman-stats';
+            form: 'notice';
+        };
     }
 }
 export declare const name = "caveman";

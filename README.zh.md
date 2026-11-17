@@ -27,24 +27,62 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-### 当前开发版安装
+把 bundle 安装到需要使用 Caveman 的会话所在的 profile。需要 Node.js 22.19 或更新版本，以及 DSH 0.2.2-rc.3 或更新版本。
 
-需要 Node.js 22.19 或更新版本，以及 DSH 0.2.2-rc.3 或更新版本。下面安装的是开发构建，不是已发布的 npm 版本：
+### 安装到 profile
+
+npm 发布后，可使用以下命令安装和移除：
+
+```text
+dsh plugin --profile <name> add @lornatang/dsh-caveman
+dsh plugin --profile <name> remove @lornatang/dsh-caveman
+```
+
+该包目前尚未发布，因此现在不能通过 npm 的 `add` 命令安装。要试用当前开发版，请先打包仓库，再安装生成的本地 tarball：
 
 ```sh
 git clone https://github.com/Lornatang/dsh-caveman.git
 cd dsh-caveman
 npm ci
-npm test
 npm pack
 dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 ```
 
-bundle 会插入一条 `caveman` 行。安装或移除后重启 profile。计划发布的包名为 `@lornatang/dsh-caveman`。
+`add` 命令把 bundle 组合进 profile：`cordis.patch.yml` 插入一条 id 为 `caveman` 的行，`package.json` 通过 `dsh.bundle.patch` 声明该 patch。行不带配置时，插件采用上游回答模式默认值，压缩、Blocks 和 Browse 均未启用。`add` 或 `remove` 后重启 DSH：profile 加载时才会组合这条行。
+
+### 你会得到
+
+| 暴露面 | 提供方 |
+|---|---|
+| 上游 Caveman 技能与按会话隔离的回答规则 | 宿主入口、`src/skills.ts` 和 `src/mode.ts` |
+| 报告当前会话已记录用量的 `/caveman-stats` | 宿主入口、`src/stats.ts` |
+| 启用后可恢复的原生工具结果压缩及 `caveman_retrieve` | 宿主入口、`src/compression.ts` 和上游 middleware |
+| 配置 Blocks 后的 shell 命令建议 | 宿主入口、`src/blocks.ts` 和上游 Blocks 钩子 |
+| 配置 Browse 后的 `mcp__caveman_browse__*` 工具 | DSH MCP manager 和上游 Browse 服务 |
+| 作为 Node 包安装时提供的 `dsh-caveman` 命令 | `scripts/caveman-cli.mjs` 和上游 CLI |
+
+### 配置
+
+bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 中加入覆盖行，只列出需要修改的字段：
+
+```yaml
+# $DSH_HOME/profiles/<name>/cordis.patch.yml
+- id: caveman
+  config:
+    defaultMode: manual
+```
+
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `defaultMode` | 上游配置，未设置时为 `caveman` | 每个会话的初始回答模式。 |
+| `inputCompression` | `false` | 启用可恢复的原生工具结果压缩。 |
+| `middlewareEndpoint` | `http://127.0.0.1:8787` | 上游 middleware 地址；当前只允许回环地址。 |
+| `blocksBinary` | 未设置 | 上游 Blocks 可执行文件的绝对路径。 |
+| `browseBinary` | 未设置 | 上游 Browse 可执行文件的绝对路径；需要 DSH MCP manager。 |
 
 ### 回答模式与命令
 
-默认模式为 `caveman`。`/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 与 `stop caveman` 均由上游解析器识别。模式按 DSH 会话隔离。DSH 技能注册表提供原始 `caveman`、`ultracave`、`megacave`、`caveman-help`、`caveman-commit`、`caveman-review`、`caveman-compress` 和 `caveman-stats` 技能。`caveman-compress` 还需要其上游技能说明中的 Python 与模型提供方配置。
+默认模式为 `caveman`。`/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 与 `stop caveman` 均由上游解析器识别。模式按 DSH 会话隔离。全部 22 个原始技能正文均可由用户显式调用；其中 `caveman`、`ultracave`、`megacave`、`caveman-help`、`caveman-commit`、`caveman-review`、`caveman-compress` 和 `caveman-stats` 也可由模型调用，其余仅供用户显式调用。部分技能涉及上游 CLI、账号或其他 agent 集成，需要单独配置；`caveman-compress` 还需要其上游说明中的 Python 与模型提供方配置。
 
 可在 profile 行中选择启动模式：
 
@@ -55,6 +93,8 @@ bundle 会插入一条 `caveman` 行。安装或移除后重启 profile。计划
 ```
 
 可选值为 `caveman`、`ultracave`、`megacave`、`manual` 和 `off`。`manual` 从普通回答开始，仍允许显式启用；`off` 遵循上游关闭默认模式的行为。profile 显式配置优先；未配置时，上游解析器依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
+
+`/caveman-stats` 报告当前 DSH 会话已提交 assistant 消息中记录的用量，说明有多少消息包含用量，排除未提交的尝试，并将节省量标记为未知。Claude Code 实现中的历史统计和分享选项不受支持。
 
 ### 可恢复的工具结果压缩
 
@@ -112,6 +152,7 @@ bundle 会插入一条 `caveman` 行。安装或移除后重启 profile。计划
 | `src/index.ts` | 注册技能，并在用户轮次注入会话对应的回答规则。 |
 | `src/skills.ts` | 通过 `ctx.skills` 提供上游技能正文及资源目录。 |
 | `src/mode.ts` | 用上游模式解析器重放用户编写的会话消息。 |
+| `src/stats.ts` | 报告 DSH 会话中已记录的用量，不推断节省量。 |
 | `src/compression.ts` | 调用上游 middleware、检查恢复工具、临时投影符合条件的结果并恢复原始 surface。 |
 | `src/blocks.ts` | 把 shell 调用转发给上游 generic Blocks 钩子并提供提示。 |
 | `scripts/caveman-cli.mjs` | 转发到上游 CLI。 |
@@ -146,11 +187,11 @@ bundle 会插入一条 `caveman` 行。安装或移除后重启 profile。计划
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与后续工作
 
-- 这**尚不是完整的 Caveman DSH 移植**。自动选模、其他浏览器提供方的结果拦截、缓存保温、上游统计和 Cavecrew 预设尚未接入 DSH。
+- 这**尚不是完整的 Caveman DSH 移植**。自动选模、其他浏览器提供方的结果拦截、缓存保温、上游历史统计和 Cavecrew 预设尚未接入 DSH。
 - Browse 需要 DSH MCP manager、单独安装的上游程序和 Chrome；只有配置 `browseBinary` 后才会启动。
 - Blocks 建议需要显式配置上游程序与本地工作区；适配层不会安装 Blocks，也不会配置其他 agent。
 - 原生结果压缩需要单独运行兼容的上游 middleware，默认关闭；目前不压缩 PTC `run_code` 结果或富内容、多块工具结果。
-- DSH 只注册上述八个技能；其他原始技能保存在 `upstream/`，但尚不宣称已在 DSH 中可用。
+- 其余 14 个只能由用户显式调用的技能保留原始说明；注册到 DSH 并不表示其外部 CLI、Cloud 或其他 agent 依赖已原生接入 DSH。
 - 离线恢复只从同一 DSH 会话提供精确分页；按文本查询仍需要上游 middleware。
 - 上游托管 Cloud 服务是独立的专有软件，不包含在公开源码快照中。CLI 可按上游账号和条款访问该服务。
 - 项目尚未发布到 npm，也尚未合入 dshmarket 目录。

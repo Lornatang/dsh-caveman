@@ -67,3 +67,57 @@ test('a real DSH agent receives mode rules and stop leaves another session untou
     await ctx.fiber.dispose()
   }
 })
+
+test('the stats command reports only recorded usage from its own DSH session', async () => {
+  const ctx = new Context()
+  await ctx.plugin(LlmRuntime)
+  await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
+  await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentLoop, { agents: [] })
+  await ctx.plugin(SkillRegistry)
+  await ctx.plugin(plugin, { defaultMode: 'manual' })
+  class UsageAdapter extends LlmAdapter {
+    async resolveModel(provider, model) { return { provider, id: model, name: model } }
+    async *stream() {
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'ok' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'ok' } }
+      yield { type: 'usage', usage: { inputTokens: 11, outputTokens: 7, cacheReadTokens: 3 } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    }
+  }
+  ctx.llm.registerAdapter(['mock'], new UsageAdapter())
+  try {
+    const first = await ctx.agentLoop.create('usage-first', { provider: 'mock', model: 'mock' })
+    const other = await ctx.agentLoop.create('usage-other', { provider: 'mock', model: 'mock' })
+    await send(first, 'one')
+    await send(other, 'another session')
+    await send(first, 'two')
+    await send(first, '/caveman-stats')
+    const event = first.session.snapshotEvents().find(item => item.type === 'user/message' && item.data.source.kind === 'dsh-caveman-stats')
+    assert.ok(event, 'a report is supplied to the model')
+    const text = event.data.content[0].text
+    assert.match(text, /Recorded assistant messages: 2/)
+    assert.match(text, /Output tokens: 14/)
+    assert.match(text, /Cache-read tokens: 6/)
+    assert.match(text, /Savings: unknown/)
+    assert.equal(other.session.snapshotEvents().some(item => item.type === 'user/message' && item.data.source.kind === 'dsh-caveman-stats'), false)
+    await send(other, '/caveman-stats --all')
+    const otherReport = other.session.snapshotEvents().find(item => item.type === 'user/message' && item.data.source.kind === 'dsh-caveman-stats')
+    assert.match(otherReport.data.content[0].text, /Options are not supported in DSH; this report covers the current session only/)
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})
+
+test('missing usage is reported as unavailable instead of zero', async () => {
+  const { sessionStats } = await import('../lib/stats.js')
+  const report = sessionStats([{ type: 'assistant/message', data: { message: {} } }], '')
+  assert.match(report, /Messages with usage: 0 of 1/)
+  assert.match(report, /Output tokens: unavailable/)
+  assert.match(report, /Cache-read tokens: unavailable/)
+})

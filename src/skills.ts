@@ -8,8 +8,15 @@ const RANK = 600
 const NAMES = [
   'caveman', 'ultracave', 'megacave', 'caveman-help',
   'caveman-commit', 'caveman-review', 'caveman-compress', 'caveman-stats',
+  'cavecrew', 'caveman-discover', 'caveman-explore', 'caveman-learn',
+  'caveman-manage', 'caveman-optimize', 'caveman-evidence-review', 'caveman-setup',
+  'investigate-first', 'lean-build', 'migration', 'safe-refactor', 'surgical-patch', 'verify-and-stop',
 ] as const
 const knownNames: ReadonlySet<string> = new Set(NAMES)
+const modelInvocable: ReadonlySet<string> = new Set([
+  'caveman', 'ultracave', 'megacave', 'caveman-help',
+  'caveman-commit', 'caveman-review', 'caveman-compress', 'caveman-stats',
+])
 
 type SkillRead = { description: string; content: string }
 
@@ -41,7 +48,7 @@ export function createSkillProvider(root: string, control?: SkillProviderControl
           const directory = join(root, name)
           candidates.push({
             name, description, source: 'bundled', provider: PROVIDER,
-            invocation: { modelInvocable: true, userInvocable: true },
+            invocation: { modelInvocable: modelInvocable.has(name), userInvocable: true },
             rank: RANK, locator: name,
             resourceBase: { kind: 'directory', path: directory.split(sep).join('/') },
           })
