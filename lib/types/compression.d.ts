@@ -1,5 +1,20 @@
 import type { Context } from '@deepseek-ai/cordis';
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session';
+import type { Session, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh-session';
+interface CompressionHistory {
+    seq: SessionLogOffset;
+    toolNames: Map<string, string>;
+    managedCalls: Set<string>;
+    hasMarker: boolean;
+    originals: Map<string, {
+        text: string;
+        sourceId: string;
+    }>;
+}
+/** Index immutable history once per session instead of rescanning it on every step. */
+export declare class CompressionHistoryIndex {
+    private readonly states;
+    read(session: Session): CompressionHistory;
+}
 /** Resolve immutable event ancestry once per session, reusing earlier results. */
 export declare function resolveOriginalResult(session: Session, event: SessionEvent<'tool/result'>): SessionEvent<'tool/result'>;
 type ExpectedProjection = {

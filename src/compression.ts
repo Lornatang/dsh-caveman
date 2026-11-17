@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionLogOffset, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { ResolvedToolSet, ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { MiddlewareRuntime, recoveryToolDescription, type Optimization, type RetrieveArgs, type Scope } from '@caveman-ai/sdk/middleware'
@@ -46,20 +46,54 @@ function isManagedTool(name: string): boolean {
     /^mcp__.+__(?:caveman_retrieve|browser_recover)$/u.test(name)
 }
 
-function originalForHandle(session: Session, handle: string): { text: string; sourceId: string } | undefined {
-  for (const event of session.snapshotEvents()) {
-    const block = textBlocks(event).find(candidate => MARKER.exec(candidate.text)?.[1] === handle)
-    if (!block || event.sourceEventSeqs?.length !== 1) continue
-    const source = session.eventAt(event.sourceEventSeqs[0]!)
-    const original = source && textBlocks(source).find(candidate => candidate.index === block.index)
-    if (source?.type === 'tool/result' && original) return { text: original.text, sourceId: `seq-${resolveOriginalResult(session, source).seq}` }
-  }
-  return undefined
+interface CompressionHistory {
+  seq: SessionLogOffset
+  toolNames: Map<string, string>
+  managedCalls: Set<string>
+  hasMarker: boolean
+  originals: Map<string, { text: string; sourceId: string }>
 }
 
-function fallbackPage(session: Session, args: RetrieveArgs): string | undefined {
+/** Index immutable history once per session instead of rescanning it on every step. */
+export class CompressionHistoryIndex {
+  private readonly states = new WeakMap<Session, CompressionHistory>()
+
+  read(session: Session): CompressionHistory {
+    const end = session.seq
+    const previous = this.states.get(session)
+    const state: CompressionHistory = previous && previous.seq <= end ? previous : {
+      seq: 0 as SessionLogOffset, toolNames: new Map(), managedCalls: new Set(), hasMarker: false, originals: new Map(),
+    }
+    for (const event of session.snapshotEvents(state.seq, end)) {
+      const dispatch = event as unknown as { type: string; data: { rootCallId?: unknown; name?: unknown } }
+      if (dispatch.type === 'tool/ptc-dispatch' && typeof dispatch.data.rootCallId === 'string' &&
+        typeof dispatch.data.name === 'string' && isManagedTool(dispatch.data.name)) state.managedCalls.add(dispatch.data.rootCallId)
+      if (event.type === 'assistant/message') {
+        for (const block of event.data.message.content) {
+          if (block.type === 'tool-call' && !state.toolNames.has(block.id)) state.toolNames.set(block.id, block.name)
+        }
+      }
+      for (const block of textBlocks(event)) {
+        const handle = MARKER.exec(block.text)?.[1]
+        if (!handle) continue
+        state.hasMarker = true
+        if (state.originals.has(handle) || event.sourceEventSeqs?.length !== 1) continue
+        const source = session.eventAt(event.sourceEventSeqs[0]!)
+        const original = source && textBlocks(source).find(candidate => candidate.index === block.index)
+        if (source?.type === 'tool/result' && original) {
+          state.originals.set(handle, { text: original.text, sourceId: `seq-${resolveOriginalResult(session, source).seq}` })
+        }
+      }
+    }
+    state.seq = end
+    this.states.set(session, state)
+    return state
+  }
+}
+
+function fallbackPage(history: CompressionHistoryIndex, session: Session, args: RetrieveArgs): string | undefined {
   if (args.query !== undefined) return undefined
-  const original = originalForHandle(session, args.handle)
+  const original = history.read(session).originals.get(args.handle)
   if (!original) return undefined
   const bytes = Buffer.from(original.text, 'utf8')
   const offset = args.offset ?? 0
@@ -185,6 +219,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
   available: (signal: AbortSignal) => Promise<boolean>
 }): void {
   const runtime = new MiddlewareRuntime({ endpoint, mode: 'compress', ...(automatic ? { fetch: automatic.fetch } : {}) })
+  const history = new CompressionHistoryIndex()
   const pending = new Map<string, {
     session: Session
     exposure: RecoveryExposure
@@ -222,7 +257,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
       const args = parseArgs(value)
       try { return JSON.stringify(await runtime.retrieve(scopeFor(exec.agent), args, exec.signal)) } catch (error) {
         exec.signal.throwIfAborted()
-        const fallback = fallbackPage(exec.agent.session, args)
+        const fallback = fallbackPage(history, exec.agent.session, args)
         if (fallback !== undefined) return fallback
         throw error
       }
@@ -234,7 +269,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     return
   }
   ctx.tools.register(tool, automatic ? {
-    when: ({ agent, signal }) => agent.session.snapshotEvents().some(event => textBlocks(event).some(block => MARKER.test(block.text))) || automatic.available(signal),
+    when: ({ agent, signal }) => history.read(agent.session).hasMarker || automatic.available(signal),
   } : undefined)
   ctx.effect(() => () => {
     try { for (const work of [...pending.values()]) restore(work.session) } finally { runtime.close() }
@@ -277,17 +312,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     if (!toolSet || ctx.tools.get(tool.name, agent, toolSet) !== tool) return decision
     const session = agent.session
     if (pending.has(String(session.id))) restore(session)
-    const toolNames = new Map<string, string>()
-    const managedCalls = new Set<string>()
-    for (const event of session.snapshotEvents()) {
-      const dispatch = event as unknown as { type: string; data: { rootCallId?: unknown; name?: unknown } }
-      if (dispatch.type === 'tool/ptc-dispatch' && typeof dispatch.data.rootCallId === 'string' &&
-        typeof dispatch.data.name === 'string' && isManagedTool(dispatch.data.name)) managedCalls.add(dispatch.data.rootCallId)
-      if (event.type !== 'assistant/message') continue
-      for (const block of event.data.message.content) {
-        if (block.type === 'tool-call' && !toolNames.has(block.id)) toolNames.set(block.id, block.name)
-      }
-    }
+    const { toolNames, managedCalls } = history.read(session)
     const eligible: { seq: SessionSeq; event: SessionEvent<'tool/result'>; blocks: { index: number; text: string }[] }[] = []
     for (const seq of [...session.surface.nodes]) {
       const event = session.eventAt(seq)

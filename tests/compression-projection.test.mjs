@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { planCompressionBatches, projectionCoverage, resolveOriginalResult } from '../lib/compression.js'
+import { CompressionHistoryIndex, planCompressionBatches, projectionCoverage, resolveOriginalResult } from '../lib/compression.js'
 
 test('compressed blocks must appear on their own tool result before dispatch', () => {
   const expected = [
@@ -42,4 +42,29 @@ test('original tool events are resolved once per session', () => {
   const otherFirst = { type: 'tool/result', seq: 1 }
   const otherSession = { eventAt(seq) { return seq === 1 ? otherFirst : events.get(seq) } }
   assert.equal(resolveOriginalResult(otherSession, third), otherFirst, 'cached results remain session scoped')
+})
+
+test('compression history reads only new events and keeps recovery scoped to each session', () => {
+  const handle = `cmw_${'a'.repeat(48)}`
+  const original = { seq: 1, type: 'tool/result', data: { message: { content: [{ type: 'text', text: 'original' }] } } }
+  const events = [
+    { seq: 0, type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', id: 'first', name: 'read' }] } } },
+    original,
+    { seq: 2, type: 'tool/result', sourceEventSeqs: [1], data: { message: { content: [{ type: 'text', text: `[caveman: shortened; exact original via caveman_retrieve handle=${handle}` }] } } },
+  ]
+  const reads = []
+  const session = { get seq() { return events.length }, snapshotEvents(from = 0, to = events.length) { reads.push(from); return events.slice(from, to) }, eventAt: seq => events.find(event => event.seq === seq) }
+  const index = new CompressionHistoryIndex()
+  let current = index.read(session)
+  assert.equal(current.toolNames.get('first'), 'read')
+  assert.equal(current.hasMarker, true)
+  assert.deepEqual(current.originals.get(handle), { text: 'original', sourceId: 'seq-1' })
+  events.push({ seq: 3, type: 'tool/ptc-dispatch', data: { rootCallId: 'program', name: 'caveman_retrieve' } })
+  current = index.read(session)
+  assert.equal(current.managedCalls.has('program'), true)
+  assert.deepEqual(reads, [0, 3])
+  const other = { seq: 0, snapshotEvents: () => [], eventAt: () => undefined }
+  assert.equal(index.read(other).hasMarker, false)
+  events.splice(0, events.length)
+  assert.equal(index.read(session).hasMarker, false, 'truncated logs invalidate prior state')
 })
