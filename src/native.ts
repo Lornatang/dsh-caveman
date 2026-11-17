@@ -98,23 +98,32 @@ export async function nativeCall(home: string, request: object, signal?: AbortSi
     const finish = (response?: NativeResponse, retry = false): void => {
       if (finished) return
       finished = true
+      clearTimeout(timeout)
       signal?.removeEventListener('abort', abort)
       socket.destroy()
       resolveResponse({ response, retry })
     }
     const abort = (): void => finish()
+    // The runtime enforces its own 250 ms budget. Allow transport and event-loop
+    // scheduling slack, while bounding the whole request even if bytes trickle in.
+    const timeout = setTimeout(() => finish(), 750)
     signal?.addEventListener('abort', abort, { once: true })
-    socket.setTimeout(250)
-    socket.once('connect', () => { connected = true; if (!finished) socket.end(payload) })
+    socket.once('connect', () => { connected = true; if (!finished) socket.write(payload) })
     socket.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > 2 * 1024 * 1024) return finish()
       chunks.push(chunk)
+      if (chunk.includes(10)) {
+        try {
+          const line = Buffer.concat(chunks)
+          const parsed: unknown = JSON.parse(line.subarray(0, line.indexOf(10)).toString('utf8'))
+          finish(validResponse(parsed) ? parsed : undefined)
+        } catch { finish() }
+      }
     })
     socket.once('end', () => {
       try { const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8')); finish(validResponse(parsed) ? parsed : undefined) } catch { finish() }
     })
-    socket.once('timeout', () => finish())
     socket.once('error', (error: NodeJS.ErrnoException) => finish(undefined, !connected && ['ENOENT', 'ECONNREFUSED'].includes(error.code ?? '')))
   })
   const first = await attempt()
@@ -161,7 +170,7 @@ async function runtimeInstance(endpoint: string, home: string, signal?: AbortSig
 
 /** Add dynamic native task context when the verified local runtime is running. */
 export function registerNative(ctx: Context, endpoint: string, policy: { mode: PolicyMode; profile: string; core: boolean }): void {
-  interface SessionState { instance: string; session: { caveman_session_id: string; host_session_id: string; cwd: string; parent_session_id?: string }; specialized: boolean; queue?: Promise<void>; contexts: string[] }
+  interface SessionState { instance: string; session: { caveman_session_id: string; host_session_id: string; cwd: string; parent_session_id?: string }; specialized: boolean; confirmed: boolean; queue?: Promise<void>; contexts: string[] }
   const sessions = new WeakMap<Agent, SessionState>()
   const owners = new WeakMap<Session, Agent>()
   const selections = new WeakMap<Agent, ResolvedToolSet>()
@@ -217,18 +226,16 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
     const current = sessions.get(agent)
     if (!current || current.instance !== instance) {
       const started = await nativeCall(home, { ...base, event: { type: 'session.start', timestamp_ms: Date.now() } }, signal)
-      if (!started) { sessions.delete(agent); return withContexts() }
-      if (parent && !await nativeCall(home, { ...base, event: { type: 'subagent.start', timestamp_ms: Date.now() } }, signal)) {
-        sessions.delete(agent)
-        return withContexts()
-      }
-      sessions.set(agent, { instance, session, specialized, contexts: [] })
+      const childStarted = parent ? await nativeCall(home, { ...base, event: { type: 'subagent.start', timestamp_ms: Date.now() } }, signal) : undefined
+      sessions.set(agent, { instance, session, specialized, confirmed: Boolean(started || childStarted), contexts: [] })
       owners.set(agent.session, agent)
     }
     for (const prompt of prompts) {
       signal.throwIfAborted()
       const response = await nativeCall(home, { ...base, event: { type: 'prompt.submit', timestamp_ms: Date.now() }, ...nativePrompt(prompt) }, signal)
-      if (!response) { sessions.delete(agent); break }
+      if (!response) break
+      const state = sessions.get(agent)
+      if (state) state.confirmed = true
       if (policy.core && !specialized && response.context && (!response.context.includes('ccr://') || await recoveryVisible())) contexts.push(response.context)
     }
     return withContexts()
@@ -245,6 +252,7 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
       const response = await nativeCall(home, { protocol_version: 1, policy_mode: policy.mode, profile: policy.profile,
         agent: { id: 'dsh', surface: 'dsh' }, session: state.session,
         event: { type: kind === 'compaction/start' ? 'context.compact.before' : 'context.compact.after', timestamp_ms: Date.now() } })
+      if (response) state.confirmed = true
       if (kind === 'compaction/end' && response?.context) state.contexts.push(response.context)
     }).catch(() => {})
     state.queue = task
@@ -254,13 +262,12 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
   ctx.on('tools/execute', async (exec, next) => {
     if (!exec.agent || exec.name === 'run_code' || isManagedTool(exec.name)) return next()
     const state = sessions.get(exec.agent)
-    if (!state) return next()
+    if (!state?.confirmed) return next()
     if (await runtimeInstance(endpoint, home, exec.signal) !== state.instance) { sessions.delete(exec.agent); return next() }
     const base = { protocol_version: 1, policy_mode: policy.mode, profile: policy.profile, agent: { id: 'dsh', surface: 'dsh' }, session: state.session }
     const beforeState = exec.name === 'read' ? await inputState(ctx, state.session.cwd, exec.arguments, exec.signal) : undefined
     const before = await nativeCall(home, { ...base, event: { type: 'tool.before', timestamp_ms: Date.now() },
       tool: { name: exec.name, input: exec.arguments, ...(beforeState ? { input_state: beforeState } : {}) } }, exec.signal)
-    if (!before) { sessions.delete(exec.agent); return next() }
     const result = await next()
     let afterState: string | undefined
     if (!exec.signal.aborted && await runtimeInstance(endpoint, home, exec.signal) === state.instance) {

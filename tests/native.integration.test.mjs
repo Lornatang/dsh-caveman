@@ -168,7 +168,11 @@ test('the local native runtime contributes a task contract to a DSH session', { 
           if (merge) break
           await new Promise(resolve => setTimeout(resolve, 20))
         }
-        assert.ok(merge, 'the child contributes its native observations to its direct parent')
+        if (!merge) {
+          const rows = database.prepare('SELECT session_id, source, object_type, lifecycle FROM typed_objects WHERE session_id IN (?, ?) ORDER BY created_at')
+            .all(parentId, cavemanSessionId(String(childId)))
+          assert.fail(`the child contributes its native observations to its direct parent; native records=${JSON.stringify(rows)}`)
+        }
         const body = JSON.parse(Buffer.from(merge.data).toString('utf8'))
         assert.equal(body.child_session_id, cavemanSessionId(String(childId)))
         assert.equal(body.parent_session_id, parentId)
@@ -198,7 +202,11 @@ test('the local native runtime contributes a task contract to a DSH session', { 
           if (merge) break
           await new Promise(resolve => setTimeout(resolve, 20))
         }
-        assert.ok(merge, 'specialized children also contribute their observations')
+        if (!merge) {
+          const rows = specialDatabase.prepare('SELECT session_id, source, object_type, lifecycle FROM typed_objects WHERE session_id IN (?, ?) ORDER BY created_at')
+            .all(cavemanSessionId('native-special-parent'), cavemanSessionId(String(specialId)))
+          assert.fail(`specialized children also contribute their observations; requests=${specialAdapter.requests.length}; native records=${JSON.stringify(rows)}`)
+        }
         const body = JSON.parse(Buffer.from(merge.data).toString('utf8'))
         assert.equal(body.child_session_id, cavemanSessionId(String(specialId)))
         assert.ok(body.evidence.some(item => item.type === 'FileObservation'))
