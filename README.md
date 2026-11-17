@@ -124,6 +124,8 @@ Merge the `caveman-auto` provider from [examples/caveman-auto.patch.yml](example
 
 When Auto is selected and routing is enabled, the proxy sends the latest and previous user asks, the tail of the last assistant response, and request facts to Caveman Cloud to select a model. The Free plan may retain that information to improve routing. When routing is off, the proxy falls back to its OpenAI default model; provider billing still applies. See the [privacy details](https://github.com/JuliusBrussee/caveman/blob/main/docs/technical/security-and-privacy.md).
 
+For Anthropic API traffic, merge [examples/caveman-anthropic.patch.yml](examples/caveman-anthropic.patch.yml) into the provider map and choose an available model. The local proxy can then apply its cache-warming policy when the request and provider cache are eligible; warm requests are recorded as usage.
+
 ### MCP, Blocks and Browse
 
 When `caveman-mcp` is installed, the DSH MCP manager exposes the `mcp__caveman__*` tools `caveman_compress`, `caveman_retrieve`, `caveman_stats`, `caveman_toon_encode`, and `caveman_toon_decode`. The server uses the local Caveman recovery store for its handles. Set `CAVEMAN_MCP=off` to disable automatic registration.

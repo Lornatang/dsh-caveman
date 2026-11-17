@@ -124,6 +124,8 @@ npx @lornatang/dsh-caveman start
 
 选择 Auto 并启用 routing 后，代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下这些内容可能被保留用于改进路由。routing 关闭时，代理回退到 OpenAI 默认模型，仍可能产生模型费用。详见[隐私说明](https://github.com/JuliusBrussee/caveman/blob/main/docs/technical/security-and-privacy.md)。
 
+Anthropic API 请求可将 [examples/caveman-anthropic.patch.yml](examples/caveman-anthropic.patch.yml) 合并到 provider map，并选择账号可用的模型。请求与提供方缓存符合条件时，本地代理会按其策略预热缓存；预热请求计入用量。
+
 ### MCP、Blocks 和 Browse
 
 安装 `caveman-mcp` 后，DSH MCP manager 会提供 `mcp__caveman__*` 工具：`caveman_compress`、`caveman_retrieve`、`caveman_stats`、`caveman_toon_encode` 和 `caveman_toon_decode`。服务使用本地 Caveman 恢复存储保存句柄。设置 `CAVEMAN_MCP=off` 可关闭自动注册。
