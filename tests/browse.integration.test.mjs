@@ -48,7 +48,7 @@ class LocalAdapter extends LlmAdapter {
   }
 }
 
-test('DSH connects the upstream Browse MCP server, snapshots a page, and recovers its original tree', {
+test('DSH connects the Browse MCP server, snapshots a page, and recovers its original tree', {
   skip: !browseBinary || !chrome, timeout: 120_000,
 }, async () => {
   const ctx = new Context()

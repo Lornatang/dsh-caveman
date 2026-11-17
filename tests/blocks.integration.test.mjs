@@ -32,7 +32,7 @@ class LocalAdapter extends LlmAdapter {
   }
 }
 
-test('the upstream Blocks hook adds a hint without changing the shell command or result', { skip: !blocksBinary }, async () => {
+test('the Blocks hook adds a hint without changing the shell command or result', { skip: !blocksBinary }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-blocks-'))
   await mkdir(join(directory, '.blocks'))
   const previousState = process.env.XDG_STATE_HOME

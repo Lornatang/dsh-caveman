@@ -24,5 +24,5 @@ export interface Config {
     browseBinary?: string;
 }
 export declare const Config: z<Config>;
-/** Register the upstream skills and reinforce the selected mode per session. */
+/** Register skills and reinforce the selected mode per session. */
 export declare function apply(ctx: Context, config?: Config): void;

@@ -14,7 +14,7 @@ interface InputEvent {
     readonly type: string;
     readonly data: unknown;
 }
-/** A profile override wins; otherwise follow upstream environment and file resolution. */
+/** A profile override wins; otherwise follow environment and file resolution. */
 export declare function defaultModeFor(configured: DefaultMode | undefined, cwd?: string): DefaultMode;
 /** Replay only user-authored messages, then evaluate the incoming batch. */
 export declare function resolveMode(configured: DefaultMode, events: readonly InputEvent[], pending: readonly InputMessage[]): {

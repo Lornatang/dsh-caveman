@@ -8,5 +8,5 @@ declare module '@deepseek-ai/dsh-llm' {
         };
     }
 }
-/** Invoke the upstream generic Blocks hook before shell dispatch; never change the command. */
+/** Invoke the generic Blocks hook before shell dispatch; never change the command. */
 export declare function registerBlocks(ctx: Context, binary: string): void;

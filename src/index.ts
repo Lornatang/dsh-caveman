@@ -34,9 +34,9 @@ export const Config: z<Config> = z.object({
   browseBinary: z.string().min(1),
 })
 
-/** Register the upstream skills and reinforce the selected mode per session. */
+/** Register skills and reinforce the selected mode per session. */
 export function apply(ctx: Context, config: Config = {}): void {
-  const root = fileURLToPath(new URL('../upstream/skills/', import.meta.url))
+  const root = fileURLToPath(new URL('../vendor/caveman/skills/', import.meta.url))
   ctx.skills.registerProvider(control => createSkillProvider(root, control))
   if (config.inputCompression) registerCompression(ctx, config.middlewareEndpoint ?? 'http://127.0.0.1:8787')
   if (config.blocksBinary) registerBlocks(ctx, config.blocksBinary)

@@ -42,7 +42,7 @@ try {
   const installed = JSON.parse(await readFile(join(profile, 'node_modules', '@lornatang', 'dsh-caveman', 'package.json'), 'utf8'))
   assert.equal(installed.name, '@lornatang/dsh-caveman')
   for (const role of ['investigator', 'builder', 'reviewer']) {
-    const path = join(profile, 'node_modules', '@lornatang', 'dsh-caveman', 'upstream', 'agents', `cavecrew-${role}.md`)
+    const path = join(profile, 'node_modules', '@lornatang', 'dsh-caveman', 'vendor', 'caveman', 'agents', `cavecrew-${role}.md`)
     assert.ok((await readFile(path, 'utf8')).includes(`name: cavecrew-${role}`), `missing ${role} persona`)
   }
   const composed = (await dsh(['--profile', 'caveman-test', '--dump-config'])).stdout

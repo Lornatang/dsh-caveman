@@ -5,7 +5,7 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 
-const root = fileURLToPath(new URL('../upstream/skills/', import.meta.url))
+const root = fileURLToPath(new URL('../vendor/caveman/skills/', import.meta.url))
 
 async function providerModule() {
   try { return await import('../lib/skills.js') } catch (error) {
@@ -14,7 +14,7 @@ async function providerModule() {
   }
 }
 
-test('the DSH skill registry serves the unmodified upstream voice and its resources', async () => {
+test('the DSH skill registry serves the voice and its resources', async () => {
   const module = await providerModule()
   assert.ok(module, 'skill provider is implemented')
   const ctx = new Context()
@@ -26,7 +26,7 @@ test('the DSH skill registry serves the unmodified upstream voice and its resour
       assert.ok(catalog.some(candidate => candidate.name === name), `${name} is discoverable`)
     }
     const skill = await ctx.skills.get('caveman')
-    const original = await readFile(new URL('../upstream/skills/caveman/SKILL.md', import.meta.url), 'utf8')
+    const original = await readFile(new URL('../vendor/caveman/skills/caveman/SKILL.md', import.meta.url), 'utf8')
     const body = original.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '').trim()
     assert.equal(skill.content, body)
     assert.equal(skill.resourceBase.kind, 'directory')
@@ -38,7 +38,7 @@ test('the DSH skill registry serves the unmodified upstream voice and its resour
   }
 })
 
-test('every upstream skill is available to an explicit user invocation', async () => {
+test('every skill is available to an explicit user invocation', async () => {
   const module = await providerModule()
   const ctx = new Context()
   await ctx.plugin(SkillRegistry)
@@ -50,7 +50,7 @@ test('every upstream skill is available to an explicit user invocation', async (
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
       let original
-      try { original = await readFile(new URL(`../upstream/skills/${entry.name}/SKILL.md`, import.meta.url), 'utf8') } catch (error) {
+      try { original = await readFile(new URL(`../vendor/caveman/skills/${entry.name}/SKILL.md`, import.meta.url), 'utf8') } catch (error) {
         if (error.code === 'ENOENT') continue
         throw error
       }

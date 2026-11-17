@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
-test('the package command forwards upstream CLI arguments and exit status', () => {
+test('the package command forwards CLI arguments and exit status', () => {
   const wrapper = fileURLToPath(new URL('../scripts/caveman-cli.mjs', import.meta.url))
   const original = fileURLToPath(new URL('../node_modules/@caveman-ai/cli/dist/index.js', import.meta.url))
   const options = { encoding: 'utf8', env: { ...process.env, DISABLE_TELEMETRY: '1' } }

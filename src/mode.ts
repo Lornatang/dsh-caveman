@@ -12,28 +12,28 @@ interface InputEvent { readonly type: string; readonly data: unknown }
 interface ParsedChange { action: 'set' | 'clear' | 'status' | 'unresolved'; mode?: string }
 
 const require = createRequire(import.meta.url)
-const upstream = require('../upstream/src/hooks/caveman-parse.js') as {
+const parser = require('../vendor/caveman/src/hooks/caveman-parse.js') as {
   parseModeChange(prompt: string, options: { getDefaultMode: () => string }): ParsedChange | null
   INDEPENDENT_MODES: Set<string>
 }
-const upstreamConfig = require('../upstream/src/hooks/caveman-config.js') as { getDefaultMode(startDir?: string): string }
+const modeConfig = require('../vendor/caveman/src/hooks/caveman-config.js') as { getDefaultMode(startDir?: string): string }
 
-/** A profile override wins; otherwise follow upstream environment and file resolution. */
+/** A profile override wins; otherwise follow environment and file resolution. */
 export function defaultModeFor(configured: DefaultMode | undefined, cwd?: string): DefaultMode {
   if (configured !== undefined) return configured
-  const mode = upstreamConfig.getDefaultMode(cwd)
+  const mode = modeConfig.getDefaultMode(cwd)
   return mode === 'manual' || mode === 'off' || mode === 'caveman' || mode === 'ultracave' || mode === 'megacave' ? mode : 'caveman'
 }
 
 function transition(mode: VoiceMode, message: InputMessage, configured: DefaultMode): { mode: VoiceMode; action: ModeAction } {
   if (message.source.kind !== 'user') return { mode, action: 'none' }
   const text = message.content.filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
-  const change = upstream.parseModeChange(text, { getDefaultMode: () => configured })
+  const change = parser.parseModeChange(text, { getDefaultMode: () => configured })
   if (!change) return { mode, action: 'none' }
   if (change.action === 'status') return { mode, action: 'status' }
   if (change.action === 'unresolved') return { mode, action: 'unresolved' }
   if (change.action === 'clear') return { mode: 'off', action: 'change' }
-  if (change.mode && upstream.INDEPENDENT_MODES.has(change.mode)) return { mode, action: 'one-shot' }
+  if (change.mode && parser.INDEPENDENT_MODES.has(change.mode)) return { mode, action: 'one-shot' }
   if (change.mode === 'caveman' || change.mode === 'ultracave' || change.mode === 'megacave') {
     return { mode: change.mode, action: 'change' }
   }

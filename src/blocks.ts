@@ -50,7 +50,7 @@ async function callHook(binary: string, input: HookInput, signal: AbortSignal): 
   })
 }
 
-/** Invoke the upstream generic Blocks hook before shell dispatch; never change the command. */
+/** Invoke the generic Blocks hook before shell dispatch; never change the command. */
 export function registerBlocks(ctx: Context, binary: string): void {
   if (!isAbsolute(binary)) throw new Error('dsh-caveman: blocksBinary must be an absolute path')
   ctx.on('tools/execute', async (exec, next) => {

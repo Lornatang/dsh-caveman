@@ -15,7 +15,7 @@ export const Config: z<Config> = z.object({
 
 /** Install one original Cavecrew persona and keep its agent's tools bounded. */
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  const original = await readFile(new URL(`../upstream/agents/cavecrew-${config.role}.md`, import.meta.url), 'utf8')
+  const original = await readFile(new URL(`../vendor/caveman/agents/cavecrew-${config.role}.md`, import.meta.url), 'utf8')
   const frontmatter = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u.exec(original)
   if (!frontmatter) throw new Error(`dsh-caveman: missing Cavecrew metadata for ${config.role}`)
   const body = original.slice(frontmatter[0].length).trim()

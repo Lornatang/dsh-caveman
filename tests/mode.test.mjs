@@ -39,7 +39,7 @@ test('quoted text and injected instructions do not control the mode', () => {
   assert.equal(resolveMode('manual', [], [user('activate caveman')]).mode, 'caveman')
 })
 
-test('the upstream environment and project default are used when the profile has no override', async () => {
+test('the environment and project default are used when the profile has no override', async () => {
   assert.ok(modeModule, 'mode adapter is implemented')
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-config-'))
   const previous = process.env.CAVEMAN_DEFAULT_MODE

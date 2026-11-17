@@ -100,7 +100,7 @@ function manifestFor(session: Session): { id: string; sha256: string }[] {
   })
 }
 
-/** Install recoverable compression using the original upstream middleware protocol. */
+/** Install recoverable compression using the middleware protocol. */
 export function registerCompression(ctx: Context, endpoint: string): void {
   const runtime = new MiddlewareRuntime({ endpoint, mode: 'compress' })
   const pending = new Map<string, { session: Session; replacements: { seq: SessionSeq; original: SessionEvent<'tool/result'>; optimization: Optimization }[] }>()

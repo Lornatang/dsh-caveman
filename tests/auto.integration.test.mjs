@@ -16,7 +16,7 @@ const proxyBinary = process.env.CAVEMAN_PROXY_BINARY
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 const close = server => new Promise(resolve => server.close(resolve))
 
-test('a DSH pi-ai route reaches upstream Auto and applies the Cloud decision', { skip: !proxyBinary, timeout: 60_000 }, async () => {
+test('a DSH pi-ai route reaches Auto and applies the Cloud decision', { skip: !proxyBinary, timeout: 60_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-auto-'))
   const home = join(directory, 'state')
   const cloudBodies = []

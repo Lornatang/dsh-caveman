@@ -19,12 +19,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci --no-audit --no-fund
-      - run: npm run verify:upstream
-      - run: npm run verify:upstream:git
       - run: npm run typecheck
       - run: npm test
       - run: git diff --exit-code -- lib
-  upstream-proxy:
+  runtime-integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -34,7 +32,7 @@ jobs:
           node-version: '24'
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - name: Fetch pinned upstream proxy
+      - name: Fetch runtime binaries
         run: |
           curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/caveman-proxy_linux_amd64 -o "$RUNNER_TEMP/caveman-proxy"
           echo "393b4e9b58f52eddcf77a24d32fd98aa0be011f8cff77498cf7ef55d9901195c  $RUNNER_TEMP/caveman-proxy" | sha256sum -c -

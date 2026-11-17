@@ -101,7 +101,7 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
       assert.equal(denied.results[0].result.isError, true, 'the executor refuses hidden shell calls')
       const prompt = await ctx.systemPrompt.assemble(assembleContextFor(agent))
       const persona = prompt.sections.find(section => section.name === 'deployment:persona-prefix')
-      const original = await readFile(new URL(`../upstream/agents/cavecrew-${role}.md`, import.meta.url), 'utf8')
+      const original = await readFile(new URL(`../vendor/caveman/agents/cavecrew-${role}.md`, import.meta.url), 'utf8')
       const body = original.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '').trim()
       assert.equal(persona.text, body)
       agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect this task.' }] }))

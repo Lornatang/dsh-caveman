@@ -35,7 +35,7 @@ async function readSkill(root: string, name: string, signal?: AbortSignal): Prom
   return { description: description.trim().replace(/\s+/g, ' '), content: raw.slice(frontmatter[0].length).trim() }
 }
 
-/** Expose original upstream skills through the DSH provider registry. */
+/** Expose skills through the DSH provider registry. */
 export function createSkillProvider(root: string, control?: SkillProviderControl): SkillProvider {
   if (!isAbsolute(root)) throw new Error('dsh-caveman: skill root must be absolute')
   return {

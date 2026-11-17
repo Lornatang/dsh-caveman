@@ -12,7 +12,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => { if (child.exitCode === null && child.signalCode === null) child.kill(signal) })
 }
 child.once('error', error => {
-  console.error(`dsh-caveman: could not start the upstream CLI: ${error.message}`)
+  console.error(`dsh-caveman: could not start the CLI: ${error.message}`)
   process.exitCode = 1
 })
 child.once('exit', (code, signal) => {
