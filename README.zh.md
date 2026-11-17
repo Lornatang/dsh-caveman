@@ -57,6 +57,7 @@ dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 | 上游 Caveman 技能与按会话隔离的回答规则 | 宿主入口、`src/skills.ts` 和 `src/mode.ts` |
 | 报告当前会话已记录用量的 `/caveman-stats` | 宿主入口、`src/stats.ts` |
 | 启用后可恢复的原生工具结果压缩及 `caveman_retrieve` | 宿主入口、`src/compression.ts` 和上游 middleware |
+| 手动配置 DSH provider 后的 Auto 选模 | DSH pi-ai 适配器和上游代理 |
 | 配置 Blocks 后的 shell 命令建议 | 宿主入口、`src/blocks.ts` 和上游 Blocks 钩子 |
 | 配置 Browse 后的 `mcp__caveman_browse__*` 工具 | DSH MCP manager 和上游 Browse 服务 |
 | 作为 Node 包安装时提供的 `dsh-caveman` 命令 | `scripts/caveman-cli.mjs` 和上游 CLI |
@@ -109,6 +110,14 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 ```
 
 只考虑成功、仅含一个文本块且不少于 2048 个 UTF-16 代码单元的原生工具结果。上游 SDK 可能决定保留原文。应用压缩结果前，适配层检查模型能否使用准确的 `caveman_retrieve` 工具。未修改的结果保留在 DSH 会话日志中；模型请求准备好后，适配层把原文恢复到可见会话。middleware 停止时，也可从该会话日志恢复原文分页。运行时不可用、拒绝请求或无法提供恢复时，原结果保持不变。本适配层没有开启远程内容传输。
+
+### Auto 自动选模
+
+通过手动配置 DSH pi-ai provider 和原始 Caveman 代理，可以使用 Auto。先安装[上游 CLI](upstream/packages/cli/README.md)，运行 `caveman login` 登录，确保 `routing` 模块开启，再用 `caveman start` 启动本地代理。DSH 还需通过凭证服务或环境变量提供 `OPENAI_API_KEY`。
+
+把 [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) 中的 `caveman-auto` 条目加入现有 `llm-pi-ai` provider 配置，保留其他已配置的 provider，然后在 DSH 中选择该 provider 的 `caveman-auto` 模型。示例只展示 provider map 的一部分；如果直接用它完整替换原 map，会移除其他路由。本包不会自动更改模型设置。
+
+登录、启用 routing 并选择 Auto 后，上游代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下 Caveman 可能保留这些内容来改进路由。routing 未启用时，上游代理会回退到 OpenAI 默认模型，仍可能产生模型费用。详见[上游隐私说明](upstream/docs/technical/security-and-privacy.md)。DSH 到代理的链路已用本地模拟 Cloud 和模型服务测试；本项目尚未验证真实账号。
 
 ### 上游 CLI
 
@@ -187,7 +196,8 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与后续工作
 
-- 这**尚不是完整的 Caveman DSH 移植**。自动选模、其他浏览器提供方的结果拦截、缓存保温、上游历史统计和 Cavecrew 预设尚未接入 DSH。
+- 这**尚不是完整的 Caveman DSH 移植**。Auto 的自动配置、其他浏览器提供方的结果拦截、缓存保温、上游历史统计和 Cavecrew 预设尚未接入 DSH。
+- Auto 需要手动配置 pi-ai provider、上游代理、Cloud 登录和 OpenAI 凭证；本项目尚未验证真实 Cloud 路由。
 - Browse 需要 DSH MCP manager、单独安装的上游程序和 Chrome；只有配置 `browseBinary` 后才会启动。
 - Blocks 建议需要显式配置上游程序与本地工作区；适配层不会安装 Blocks，也不会配置其他 agent。
 - 原生结果压缩需要单独运行兼容的上游 middleware，默认关闭；目前不压缩 PTC `run_code` 结果或富内容、多块工具结果。
@@ -202,7 +212,7 @@ bundle 自带不含配置的 `caveman` 行。在 profile 的 `cordis.patch.yml` 
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行本地测试。要验证 middleware、Blocks 和 Browse 集成，请把 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY` 和 `CAVEMAN_BROWSE_BINARY` 分别指向上游 `bin-v4.1.0` 程序，并把 `CAVEMAN_BROWSE_CHROME` 指向 Chrome；未设置时对应测试会跳过。`npm run test:dsh` 在隔离的 DSH profile 中安装并启动包。`npm pack` 通过 `prepack` 运行测试。DSH 测试使用本地 mock 模型，不测量模型质量或提供方账单。`upstream/` 是参考快照；适配层修改放在根目录 `src/`。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行本地测试。要验证 Auto、middleware、Blocks 和 Browse，请把 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY` 和 `CAVEMAN_BROWSE_BINARY` 分别指向上游 `bin-v4.1.0` 程序，并把 `CAVEMAN_BROWSE_CHROME` 指向 Chrome；Auto 测试还需要 OpenSSL 生成隔离测试证书。未设置相应变量时对应测试会跳过。`npm run test:dsh` 在隔离的 DSH profile 中安装、启动并移除包。`npm pack` 通过 `prepack` 运行测试。DSH 测试使用本地 mock 服务，不测量模型质量或提供方账单。`upstream/` 是参考快照；适配层修改放在根目录 `src/`。
 
 </details>
 

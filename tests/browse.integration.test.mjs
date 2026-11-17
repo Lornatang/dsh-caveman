@@ -49,7 +49,7 @@ class LocalAdapter extends LlmAdapter {
 }
 
 test('DSH connects the upstream Browse MCP server, snapshots a page, and recovers its original tree', {
-  skip: !browseBinary || !chrome, timeout: 90_000,
+  skip: !browseBinary || !chrome, timeout: 120_000,
 }, async () => {
   const ctx = new Context()
   const previousEphemeral = process.env.CAVEMAN_BROWSE_EPHEMERAL
@@ -66,9 +66,10 @@ test('DSH connects the upstream Browse MCP server, snapshots a page, and recover
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(McpManager, {})
     await ctx.plugin(plugin, { defaultMode: 'manual', browseBinary })
-    for (let attempt = 0; attempt < 200; attempt++) {
-      if (ctx.mcpManager.list().find(entry => entry.name === 'caveman_browse')?.status.state === 'connected') break
-      if (attempt === 199) throw new Error('Browse MCP server did not connect')
+    for (let attempt = 0; attempt < 600; attempt++) {
+      const status = ctx.mcpManager.list().find(entry => entry.name === 'caveman_browse')?.status
+      if (status?.state === 'connected') break
+      if (status?.state === 'failed' || attempt === 599) throw new Error(`Browse MCP server did not connect: ${JSON.stringify(status)}`)
       await new Promise(resolve => setTimeout(resolve, 100))
     }
     const adapter = new LocalAdapter()

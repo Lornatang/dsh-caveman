@@ -32,6 +32,7 @@
   "files": [
     "lib",
     "scripts/caveman-cli.mjs",
+    "examples",
     "upstream/skills",
     "upstream/src/hooks",
     "upstream/LICENSE",
@@ -74,6 +75,7 @@
     "@deepseek-ai/dsh-agent": "0.2.2-rc.3",
     "@deepseek-ai/dsh-agent-loop": "^0.2.2-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.3",
     "@deepseek-ai/dsh-mcp-manager": "0.2.2-rc.3",
     "@deepseek-ai/dsh-skill": "0.2.2-rc.3",
     "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.3",

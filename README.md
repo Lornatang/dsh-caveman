@@ -57,6 +57,7 @@ The `add` command composes the bundle into the profile: `cordis.patch.yml` inser
 | Original Caveman skills and per-session voice instructions | host entry, `src/skills.ts` and `src/mode.ts` |
 | `/caveman-stats` for recorded current-session usage | host entry, `src/stats.ts` |
 | Recoverable native tool-result compression and `caveman_retrieve`, when enabled | host entry, `src/compression.ts` and the upstream middleware |
+| Auto model selection, after manually configuring a DSH provider | DSH pi-ai adapter and the upstream proxy |
 | Shell-command suggestions, when Blocks is configured | host entry, `src/blocks.ts` and the upstream Blocks hook |
 | `mcp__caveman_browse__*` tools, when Browse is configured | DSH MCP manager and the upstream Browse server |
 | `dsh-caveman` command when installed as a Node package | `scripts/caveman-cli.mjs` and the upstream CLI |
@@ -109,6 +110,14 @@ Compression is opt-in. Start a compatible upstream Caveman middleware runtime on
 ```
 
 Only successful native tool results with a single text block of at least 2048 UTF-16 code units are considered. The upstream SDK may keep an eligible result unchanged. Before applying a replacement, the adapter verifies that the exact `caveman_retrieve` tool is available to the model. The unmodified tool result remains in the DSH session log; the adapter restores it to the visible session after preparing the model request. If the middleware stops, exact original pages can also be recovered from that session log. A runtime that is unavailable, refuses the request, or cannot provide recovery leaves the original unchanged. Remote content transfer is not enabled by this adapter.
+
+### Auto model selection
+
+Auto can be used through a manually configured DSH pi-ai provider and the original Caveman proxy. Install the [upstream CLI](upstream/packages/cli/README.md), sign in with `caveman login`, ensure its `routing` module is on, and start its local proxy with `caveman start`. An OpenAI API key must be available to DSH as `OPENAI_API_KEY` through its credentials provider or environment.
+
+Add the `caveman-auto` entry from [examples/caveman-auto.patch.yml](examples/caveman-auto.patch.yml) to the existing `llm-pi-ai` provider configuration, preserving any other configured providers. Select the `caveman-auto` model on that provider in DSH. The example is a provider-map excerpt; applying it as a complete replacement without the existing providers can remove those routes. This package does not change model settings automatically.
+
+When signed in with routing enabled and Auto selected, the upstream proxy sends the latest and previous user asks, the tail of the last assistant response, and request facts to Caveman Cloud for model selection. On the Free plan, Caveman may retain them to improve routing. Without routing, the upstream proxy falls back to its OpenAI default model; provider billing still applies. See [upstream privacy details](upstream/docs/technical/security-and-privacy.md). The DSH-to-proxy path is tested with local mock Cloud and provider servers; a live account has not been tested here.
 
 ### Upstream CLI
 
@@ -187,7 +196,8 @@ Changing mode or replacing and restoring a tool-result surface changes session h
 <a id="known-limitations-and-deferred-work"></a>
 ## Known Limitations and Deferred Work
 
-- This is **not yet a complete DSH port** of Caveman. Auto model routing, interception of other browser providers, cache warming, upstream historical statistics, and Cavecrew presets are not integrated into DSH.
+- This is **not yet a complete DSH port** of Caveman. Automatic Auto setup, interception of other browser providers, cache warming, upstream historical statistics, and Cavecrew presets are not integrated into DSH.
+- Auto requires a manually configured pi-ai provider, an upstream proxy and Cloud login, and an OpenAI credential; the live Cloud route has not been validated by this project.
 - Browse requires the DSH MCP manager and a separately installed upstream binary and Chrome; it starts only when `browseBinary` is configured.
 - Blocks suggestions require an explicitly configured upstream binary and a local workspace; the adapter does not install Blocks or configure other agents.
 - Native compression requires an independently running compatible upstream middleware service. It is disabled by default and currently does not shorten PTC `run_code` or rich/multiblock tool results.
@@ -202,7 +212,7 @@ Changing mode or replacing and restoring a tool-result surface changes session h
 <details>
 <summary>Maintainer context</summary>
 
-`npm run typecheck` checks TypeScript; `npm test` builds and runs the local suite. To exercise the middleware, Blocks, and Browse integrations, set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to the respective pinned upstream `bin-v4.1.0` executables, and set `CAVEMAN_BROWSE_CHROME` to Chrome. Tests without the corresponding values are skipped. `npm run test:dsh` installs and boots the pack in an isolated DSH profile. `npm pack` runs the test suite through `prepack`. The DSH tests use a local mock model and do not measure model quality or provider billing. `upstream/` is preserved as a reference snapshot; adapter changes belong in root `src/`.
+`npm run typecheck` checks TypeScript; `npm test` builds and runs the local suite. To exercise Auto, middleware, Blocks, and Browse, set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to the respective pinned upstream `bin-v4.1.0` executables, and set `CAVEMAN_BROWSE_CHROME` to Chrome. The Auto test also requires OpenSSL to create an isolated test certificate. Tests without the corresponding values are skipped. `npm run test:dsh` installs, boots, and removes the pack in an isolated DSH profile. `npm pack` runs the test suite through `prepack`. The DSH tests use local mock services and do not measure model quality or provider billing. `upstream/` is preserved as a reference snapshot; adapter changes belong in root `src/`.
 
 </details>
 
