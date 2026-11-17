@@ -75,7 +75,7 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 | Field | Default | Meaning |
 |---|---|---|
 | `defaultMode` | Configuration-derived, otherwise `caveman` | Starting voice for a session. |
-| `inputCompression` | `false` | Enable recoverable native tool-result compression. |
+| `inputCompression` | auto | Use a verified local runtime when available; set `false` to disable or `true` to use the configured endpoint. |
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | Loopback middleware address. |
 | `blocksBinary` | auto-detected | Override the absolute path to `caveman-blocks`. |
 | `browseBinary` | auto-detected | Override the absolute path to `caveman-browse`; requires the DSH MCP manager. |
@@ -90,7 +90,7 @@ Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, 
 
 ### Recoverable compression
 
-Start a compatible Caveman middleware runtime on loopback in `compress` mode and enable it in the profile:
+Start the local Caveman middleware in `compress` mode. With the `input` module enabled, the plugin detects its loopback listener and verifies it against the runtime's local run-state before sending tool content. Set `inputCompression: false` to turn this off. To explicitly use a configured middleware endpoint, set:
 
 ```yaml
 - id: caveman
@@ -176,7 +176,7 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 
 - Auto requires a configured pi-ai provider, Caveman proxy, Cloud login, and OpenAI credential. The integration tests use local mock services.
 - Browse requires the MCP manager, `caveman-browse`, and Chrome. Blocks requires `caveman-blocks` and a local workspace.
-- Native compression is opt-in and handles single-text-block native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
+- Native compression handles single-text-block native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
 - Thirteen skills require explicit user invocation, and some require additional CLI, account, or agent setup.
 - Cavecrew's inspection roles use read, search, and read-only Git tools; the builder can edit existing files and is limited to two file paths.
 

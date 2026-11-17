@@ -101,8 +101,11 @@ function manifestFor(session: Session): { id: string; sha256: string }[] {
 }
 
 /** Install recoverable compression using the middleware protocol. */
-export function registerCompression(ctx: Context, endpoint: string): void {
-  const runtime = new MiddlewareRuntime({ endpoint, mode: 'compress' })
+export function registerCompression(ctx: Context, endpoint: string, automatic?: {
+  fetch: typeof fetch
+  available: (signal: AbortSignal) => Promise<boolean>
+}): void {
+  const runtime = new MiddlewareRuntime({ endpoint, mode: 'compress', ...(automatic ? { fetch: automatic.fetch } : {}) })
   const pending = new Map<string, { session: Session; replacements: { seq: SessionSeq; original: SessionEvent<'tool/result'>; optimization: Optimization }[] }>()
   function restore(session: Session): Optimization[] {
     const key = String(session.id)
@@ -148,7 +151,12 @@ export function registerCompression(ctx: Context, endpoint: string): void {
     runtime.close()
     return
   }
-  ctx.tools.register(tool)
+  ctx.tools.register(tool, automatic ? {
+    when: ({ agent, signal }) => agent.session.snapshotEvents().some(event => {
+      const text = textOf(event)
+      return text !== undefined && MARKER.test(text)
+    }) || automatic.available(signal),
+  } : undefined)
   ctx.effect(() => () => {
     try { for (const work of [...pending.values()]) restore(work.session) } finally { runtime.close() }
   }, 'dsh-caveman:runtime')

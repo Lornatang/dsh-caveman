@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import test from 'node:test'
-import { findCavemanBinary, moduleEnabled } from '../lib/runtime.js'
+import { findCavemanBinary, guardedRuntimeFetch, moduleEnabled } from '../lib/runtime.js'
 
 test('runtime discovery honors overrides, PATH, the Caveman home, and module switches', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-caveman-discovery-'))
@@ -37,9 +38,54 @@ test('runtime discovery honors overrides, PATH, the Caveman home, and module swi
     assert.equal(moduleEnabled('browse', env), false)
     await writeFile(join(home, 'cloud.json'), JSON.stringify({ modules: { browse: true }, execute: { browse_tool: false } }))
     assert.equal(moduleEnabled('browse', env), true)
+    await writeFile(join(home, 'cloud.json'), JSON.stringify({ think: { mode: 'record' } }))
+    assert.equal(moduleEnabled('input', env), false)
+    await writeFile(join(home, 'cloud.json'), JSON.stringify({ modules: { input: true }, think: { mode: 'record' } }))
+    assert.equal(moduleEnabled('input', env), true)
     await writeFile(join(home, 'cloud.json'), '{invalid')
     assert.equal(moduleEnabled('browse', env), true)
   } finally {
+    if (dirname(resolve(root)) !== resolve(tmpdir()) || !root.includes('dsh-caveman-discovery-')) throw new Error('unexpected test directory')
+    await rm(root, { recursive: true, force: true, maxRetries: 3 })
+  }
+})
+
+test('automatic middleware refuses a foreign listener before sending content', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-caveman-discovery-'))
+  const run = join(root, 'run')
+  let observed = 0
+  let listenerToken = 'foreign'
+  const server = createServer((request, response) => {
+    if (request.url === '/health/live') {
+      response.writeHead(200, { 'x-caveman-instance': listenerToken })
+      response.end('ok')
+    } else {
+      observed++
+      response.end('accepted')
+    }
+  })
+  await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', resolve).on('error', reject))
+  const port = server.address().port
+  const endpoint = `http://127.0.0.1:${port}`
+  try {
+    await mkdir(run)
+    const guarded = guardedRuntimeFetch(endpoint, { CAVEMAN_HOME: root })
+    await assert.rejects(guarded(`${endpoint}/optimize`, { method: 'POST', body: 'private' }))
+    await writeFile(join(run, `${port}.json`), JSON.stringify({
+      schema: 'caveman.proxy.run.v1', owner: 'start', pid: process.pid, port, instance_token: 'expected',
+    }))
+    await assert.rejects(guarded(`${endpoint}/optimize`, { method: 'POST', body: 'private' }))
+    assert.equal(observed, 0, 'neither unverified listener receives content')
+    listenerToken = 'expected'
+    const response = await guarded(`${endpoint}/optimize`, { method: 'POST', body: 'private' })
+    assert.equal(await response.text(), 'accepted')
+    assert.equal(observed, 1)
+    listenerToken = 'replacement'
+    await assert.rejects(guarded(`${endpoint}/optimize`, { method: 'POST', body: 'private' }))
+    assert.equal(observed, 1, 'a replaced listener receives no later content')
+    await assert.rejects(guarded('http://example.invalid/optimize', { method: 'POST', body: 'private' }))
+  } finally {
+    await new Promise(resolve => server.close(resolve))
     if (dirname(resolve(root)) !== resolve(tmpdir()) || !root.includes('dsh-caveman-discovery-')) throw new Error('unexpected test directory')
     await rm(root, { recursive: true, force: true, maxRetries: 3 })
   }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -22,6 +22,7 @@ const original = Array.from({ length: 1200 }, (_, i) => `INFO request ${i} GET /
 
 async function startProxy() {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-test-'))
+  await writeFile(join(directory, 'cloud.json'), JSON.stringify({ modules: { input: true } }))
   const probe = createServer()
   await new Promise((resolve, reject) => probe.listen(0, '127.0.0.1', resolve).on('error', reject))
   const port = probe.address().port
@@ -39,7 +40,7 @@ async function startProxy() {
     await new Promise(resolve => setTimeout(resolve, 100))
   }
   return {
-    endpoint,
+    endpoint, home: directory,
     async stop() {
       if (child.exitCode === null && child.signalCode === null) {
         const exited = new Promise(resolve => child.once('exit', resolve))
@@ -84,9 +85,11 @@ class LocalAdapter extends LlmAdapter {
   }
 }
 
-async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRestoreOnce = false) {
+async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRestoreOnce = false, automatic = false, disabled = false) {
   const service = await startProxy()
   const ctx = new Context()
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
   try {
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
@@ -97,7 +100,7 @@ async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRe
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SkillRegistry)
-    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: true, middlewareEndpoint: service.endpoint })
+    await ctx.plugin(plugin, { defaultMode: 'manual', ...(disabled ? { inputCompression: false } : automatic ? {} : { inputCompression: true }), middlewareEndpoint: service.endpoint })
     ctx.tools.register(defineTool({
       name: 'large_fixture', description: 'Return a large sample.', parameters: {},
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
@@ -126,7 +129,7 @@ async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRe
       assert.ok(visible.some(event => event.type === 'tool/result' && event.data.message.toolCallId === 'output-call' && event.data.message.content[0]?.text === original), 'idle cleanup retries restoration after a transient failure')
       return
     }
-    if (denyRecovery) {
+    if (denyRecovery || disabled) {
       assert.equal(adapter.requests.length, 2)
       const visible = adapter.requests[1].messages.filter(message => message.role === 'tool').at(-1).content[0].text
       assert.equal(visible, original, 'without a callable recovery tool the original passes through')
@@ -142,12 +145,22 @@ async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRe
     assert.ok(visible.some(event => event.type === 'tool/result' && event.data.message.toolCallId === 'output-call' && event.data.message.content[0]?.text === original), 'the visible session is restored after dispatch')
   } finally {
     await ctx.fiber.dispose()
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
     await service.close()
   }
 }
 
 test('DSH compresses recoverably while preserving the original session event', { skip: !proxyBinary }, async () => {
   await exerciseRecovery(false)
+})
+
+test('a verified local runtime enables compression and offline recovery automatically', { skip: !proxyBinary }, async () => {
+  await exerciseRecovery(true, false, false, true)
+})
+
+test('disabling input compression keeps the original tool output', { skip: !proxyBinary }, async () => {
+  await exerciseRecovery(false, false, false, true, true)
 })
 
 test('the original remains recoverable from the session if the proxy stops', { skip: !proxyBinary }, async () => {

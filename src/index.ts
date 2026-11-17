@@ -11,7 +11,7 @@ import { defaultModeFor, resolveMode, type DefaultMode, type VoiceMode } from '.
 import { registerCompression } from './compression.js'
 import { registerBlocks } from './blocks.js'
 import { sessionStats } from './stats.js'
-import { findCavemanBinary, moduleEnabled } from './runtime.js'
+import { findCavemanBinary, guardedRuntimeFetch, moduleEnabled, verifiedRuntime } from './runtime.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -28,7 +28,7 @@ export const Config: z<Config> = z.object({
   defaultMode: z.union([
     z.const('caveman'), z.const('ultracave'), z.const('megacave'), z.const('off'), z.const('manual'),
   ]),
-  inputCompression: z.boolean().default(false),
+  inputCompression: z.boolean(),
   middlewareEndpoint: z.string().default('http://127.0.0.1:8787'),
   blocksBinary: z.string().min(1),
   browseBinary: z.string().min(1),
@@ -38,7 +38,13 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config = {}): void {
   const root = fileURLToPath(new URL('../vendor/caveman/skills/', import.meta.url))
   ctx.skills.registerProvider(control => createSkillProvider(root, control))
-  if (config.inputCompression) registerCompression(ctx, config.middlewareEndpoint ?? 'http://127.0.0.1:8787')
+  if (config.inputCompression !== false && moduleEnabled('input')) {
+    const endpoint = config.middlewareEndpoint ?? 'http://127.0.0.1:8787'
+    const automatic = config.inputCompression === true ? undefined : {
+      fetch: guardedRuntimeFetch(endpoint), available: (signal: AbortSignal) => verifiedRuntime(endpoint, process.env, signal),
+    }
+    registerCompression(ctx, endpoint, automatic)
+  }
   const blocks = moduleEnabled('scripts') ? findCavemanBinary('blocks', config.blocksBinary) : undefined
   if (blocks) registerBlocks(ctx, blocks)
   const browse = moduleEnabled('browse') ? findCavemanBinary('browse', config.browseBinary) : undefined

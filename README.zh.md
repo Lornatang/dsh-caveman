@@ -75,7 +75,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `defaultMode` | 由配置决定，未设置时为 `caveman` | 会话的初始回答风格。 |
-| `inputCompression` | `false` | 启用可恢复的原生工具结果压缩。 |
+| `inputCompression` | 自动 | 可用时使用经过验证的本地运行时；设为 `false` 可关闭，设为 `true` 可使用配置的地址。 |
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | middleware 回环地址。 |
 | `blocksBinary` | 自动查找 | 覆盖 `caveman-blocks` 的绝对路径。 |
 | `browseBinary` | 自动查找 | 覆盖 `caveman-browse` 的绝对路径；需要 DSH MCP manager。 |
@@ -90,7 +90,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 ### 可恢复压缩
 
-在回环地址启动兼容的 Caveman middleware，并将其模式设为 `compress`，然后在 profile 中启用：
+启动本地 Caveman middleware 并将其模式设为 `compress`。`input` 模块启用时，插件会发现回环地址上的运行时，并在发送工具内容前验证其本地运行状态。将 `inputCompression` 设为 `false` 可以关闭；也可在 profile 中显式指定 middleware 地址：
 
 ```yaml
 - id: caveman
@@ -176,7 +176,7 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 
 - Auto 需要配置 pi-ai provider、Caveman 代理、Cloud 登录和 OpenAI 凭证；集成测试使用本地模拟服务。
 - Browse 需要 MCP manager、`caveman-browse` 和 Chrome；Blocks 需要 `caveman-blocks` 与本地工作区。
-- 原生压缩需要显式启用，处理单文本块的原生工具结果。离线恢复提供精确分页，按文本查询需要 middleware。
+- 原生压缩处理单文本块的原生工具结果。离线恢复提供精确分页，按文本查询需要 middleware。
 - 13 个技能需要用户显式调用，部分技能还需要额外的 CLI、账号或 agent 配置。
 - Cavecrew 的检查角色使用读取、搜索和只读 Git 工具；构建角色可编辑现有文件，限两个文件路径。
 
