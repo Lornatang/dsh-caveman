@@ -43,9 +43,13 @@ jobs:
           curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/caveman-browse_linux_amd64 -o "$RUNNER_TEMP/caveman-browse"
           echo "ef3f72384536a65589badd15ba3f8b2f901c4d48af99eac80c4d1c7569729dd9  $RUNNER_TEMP/caveman-browse" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/caveman-browse"
-      - run: node --test tests/auto.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs
+          curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/caveman-mcp_linux_amd64 -o "$RUNNER_TEMP/caveman-mcp"
+          echo "23334424cf813117c497d49e1410d4b02f033db0a5f12ff8859e9bb62317f3cf  $RUNNER_TEMP/caveman-mcp" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/caveman-mcp"
+      - run: node --test tests/auto.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs tests/mcp.integration.test.mjs
         env:
           CAVEMAN_PROXY_BINARY: ${{ runner.temp }}/caveman-proxy
           CAVEMAN_BLOCKS_BINARY: ${{ runner.temp }}/caveman-blocks
           CAVEMAN_BROWSE_BINARY: ${{ runner.temp }}/caveman-browse
           CAVEMAN_BROWSE_CHROME: /usr/bin/google-chrome
+          CAVEMAN_MCP_BINARY: ${{ runner.temp }}/caveman-mcp

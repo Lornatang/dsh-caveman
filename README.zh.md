@@ -56,6 +56,7 @@ dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 | 原生编码规则 | `src/index.ts` |
 | 报告当前会话已记录用量的 `/caveman-stats` | `src/stats.ts` |
 | 可恢复的工具结果压缩与 `caveman_retrieve` | `src/compression.ts` 和 middleware 运行时 |
+| 压缩、恢复、统计和 TOON MCP 工具 | DSH MCP manager 和 `caveman-mcp` |
 | Auto 自动选模 | DSH pi-ai provider 和 Caveman 代理 |
 | Shell 命令建议 | `src/blocks.ts` 和 Blocks |
 | `mcp__caveman_browse__*` 浏览器工具 | DSH MCP manager 和 Browse |
@@ -80,6 +81,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | middleware 回环地址。 |
 | `blocksBinary` | 自动查找 | 覆盖 `caveman-blocks` 的绝对路径。 |
 | `browseBinary` | 自动查找 | 覆盖 `caveman-browse` 的绝对路径；需要 DSH MCP manager。 |
+| `mcpBinary` | 自动查找 | 覆盖 `caveman-mcp` 的绝对路径；需要 DSH MCP manager。 |
 
 ### 回答模式与用量
 
@@ -112,13 +114,15 @@ output 模块和 Core 启用时，原生编码规则会加入系统提示词。�
 
 选择 Auto 并启用 routing 后，代理会把最近两次用户请求、上一次 assistant 回复的末尾及请求信息发送给 Caveman Cloud，以选择模型。免费计划下这些内容可能被保留用于改进路由。routing 关闭时，代理回退到 OpenAI 默认模型，仍可能产生模型费用。详见[隐私说明](https://github.com/JuliusBrussee/caveman/blob/main/docs/technical/security-and-privacy.md)。
 
-### Blocks 和 Browse
+### MCP、Blocks 和 Browse
+
+安装 `caveman-mcp` 后，DSH MCP manager 会提供 `mcp__caveman__*` 工具：`caveman_compress`、`caveman_retrieve`、`caveman_stats`、`caveman_toon_encode` 和 `caveman_toon_decode`。服务使用本地 Caveman 恢复存储保存句柄。设置 `CAVEMAN_MCP=off` 可关闭自动注册。
 
 安装 `caveman-blocks` 后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
 
 安装 `caveman-browse` 后，DSH MCP manager 会注册 `mcp__caveman_browse__browser_snapshot`、`browser_act`、`browser_eval` 和 `browser_recover`。Browse 默认启动专用的无头 Chrome；工具共享该服务的浏览器状态，可以导航并运行 JavaScript。
 
-插件依次从 `CAVEMAN_BLOCKS_BIN` 或 `CAVEMAN_BROWSE_BIN`、`PATH`、`$CAVEMAN_HOME/bin`（默认 `~/.caveman/bin`）查找对应程序；profile 中的路径优先。`scripts` 和 `browse` 模块开关在启动时读取，修改后重启 DSH。
+插件依次从 `CAVEMAN_MCP_BIN`、`CAVEMAN_BLOCKS_BIN` 或 `CAVEMAN_BROWSE_BIN`、`PATH`、`$CAVEMAN_HOME/bin`（默认 `~/.caveman/bin`）查找对应程序；profile 中的路径优先。模块开关在启动时读取，修改后重启 DSH。
 
 ### Cavecrew
 
@@ -189,6 +193,6 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_MCP_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
 
 </details>

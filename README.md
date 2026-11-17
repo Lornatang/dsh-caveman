@@ -56,6 +56,7 @@ The `add` command composes the bundle into the profile. Its patches insert the `
 | Native coding policy | `src/index.ts` |
 | `/caveman-stats` for recorded session usage | `src/stats.ts` |
 | Recoverable tool-result compression and `caveman_retrieve` | `src/compression.ts` and the middleware runtime |
+| Compression, recovery, statistics, and TOON MCP tools | DSH MCP manager and `caveman-mcp` |
 | Auto model selection | DSH pi-ai provider and Caveman proxy |
 | Shell suggestions | `src/blocks.ts` and Blocks |
 | `mcp__caveman_browse__*` browser tools | DSH MCP manager and Browse |
@@ -80,6 +81,7 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 | `middlewareEndpoint` | `http://127.0.0.1:8787` | Loopback middleware address. |
 | `blocksBinary` | auto-detected | Override the absolute path to `caveman-blocks`. |
 | `browseBinary` | auto-detected | Override the absolute path to `caveman-browse`; requires the DSH MCP manager. |
+| `mcpBinary` | auto-detected | Override the absolute path to `caveman-mcp`; requires the DSH MCP manager. |
 
 ### Voice and usage
 
@@ -112,13 +114,15 @@ Merge the `caveman-auto` provider from [examples/caveman-auto.patch.yml](example
 
 When Auto is selected and routing is enabled, the proxy sends the latest and previous user asks, the tail of the last assistant response, and request facts to Caveman Cloud to select a model. The Free plan may retain that information to improve routing. When routing is off, the proxy falls back to its OpenAI default model; provider billing still applies. See the [privacy details](https://github.com/JuliusBrussee/caveman/blob/main/docs/technical/security-and-privacy.md).
 
-### Blocks and Browse
+### MCP, Blocks and Browse
+
+When `caveman-mcp` is installed, the DSH MCP manager exposes the `mcp__caveman__*` tools `caveman_compress`, `caveman_retrieve`, `caveman_stats`, `caveman_toon_encode`, and `caveman_toon_decode`. The server uses the local Caveman recovery store for its handles. Set `CAVEMAN_MCP=off` to disable automatic registration.
 
 When `caveman-blocks` is installed, `bash` and `pwsh` calls can receive Blocks suggestions. Suggestions accompany the result and do not change the command. Blocks reads the local `.blocks` directory and may save scrubbed script observations and usage data; see its [telemetry settings](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md).
 
 When `caveman-browse` is installed, the DSH MCP manager registers `mcp__caveman_browse__browser_snapshot`, `browser_act`, `browser_eval`, and `browser_recover`. Browse starts a dedicated headless Chrome by default. Its tools share the server's browser state and can navigate and run JavaScript.
 
-The plugin looks for each binary in its `CAVEMAN_BLOCKS_BIN` or `CAVEMAN_BROWSE_BIN` override, on `PATH`, then in `$CAVEMAN_HOME/bin` (or `~/.caveman/bin`). Profile paths take precedence. The `scripts` and `browse` module switches are read on startup; restart DSH after changing them.
+The plugin looks for each binary in its `CAVEMAN_MCP_BIN`, `CAVEMAN_BLOCKS_BIN`, or `CAVEMAN_BROWSE_BIN` override, on `PATH`, then in `$CAVEMAN_HOME/bin` (or `~/.caveman/bin`). Profile paths take precedence. Module switches are read on startup; restart DSH after changing them.
 
 ### Cavecrew
 
@@ -189,6 +193,6 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 <details>
 <summary>Maintainer context</summary>
 
-`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
+`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_MCP_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
 
 </details>

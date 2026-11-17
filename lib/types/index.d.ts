@@ -22,6 +22,7 @@ export interface Config {
     middlewareEndpoint?: string;
     blocksBinary?: string;
     browseBinary?: string;
+    mcpBinary?: string;
 }
 export declare const Config: z<Config>;
 /** Register skills and reinforce the selected mode per session. */

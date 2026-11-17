@@ -24,7 +24,7 @@ declare module '@deepseek-ai/dsh-llm' {
 export const name = 'caveman'
 export const inject = ['skills', 'tools', 'systemPrompt', 'llm']
 
-export interface Config { defaultMode?: DefaultMode; inputCompression?: boolean; middlewareEndpoint?: string; blocksBinary?: string; browseBinary?: string }
+export interface Config { defaultMode?: DefaultMode; inputCompression?: boolean; middlewareEndpoint?: string; blocksBinary?: string; browseBinary?: string; mcpBinary?: string }
 export const Config: z<Config> = z.object({
   defaultMode: z.union([
     z.const('caveman'), z.const('ultracave'), z.const('megacave'), z.const('off'), z.const('manual'),
@@ -33,6 +33,7 @@ export const Config: z<Config> = z.object({
   middlewareEndpoint: z.string().default('http://127.0.0.1:8787'),
   blocksBinary: z.string().min(1),
   browseBinary: z.string().min(1),
+  mcpBinary: z.string().min(1),
 })
 
 /** Register skills and reinforce the selected mode per session. */
@@ -66,10 +67,15 @@ export function apply(ctx: Context, config: Config = {}): void {
   const blocks = settings.scripts ? findCavemanBinary('blocks', config.blocksBinary) : undefined
   if (blocks) registerBlocks(ctx, blocks)
   const browse = settings.browse ? findCavemanBinary('browse', config.browseBinary) : undefined
-  if (browse) {
+  const mcp = settings.mcp ? findCavemanBinary('mcp', config.mcpBinary) : undefined
+  const servers = [{ name: 'caveman', binary: mcp }, { name: 'caveman_browse', binary: browse }]
+    .filter((server): server is { name: string; binary: string } => server.binary !== undefined)
+  if (servers.length) {
     ctx.inject(['mcpManager'], scoped => {
-      if (!scoped.mcpManager.list().some(entry => entry.name === 'caveman_browse' && entry.configured)) {
-        scoped.mcpManager.register('caveman_browse', { transport: 'stdio', command: browse, args: [] })
+      for (const server of servers) {
+        if (!scoped.mcpManager.list().some(entry => entry.name === server.name && entry.configured)) {
+          scoped.mcpManager.register(server.name, { transport: 'stdio', command: server.binary, args: [] })
+        }
       }
     })
   }

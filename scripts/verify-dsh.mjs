@@ -14,7 +14,7 @@ const executable = process.env.DSH_TEST_EXECUTABLE || 'dsh'
 const prefix = process.env.DSH_TEST_ENTRY ? ['--expose-internals', process.env.DSH_TEST_ENTRY] : []
 const env = { ...process.env, DSH_HOME: join(temp, 'dsh-home'), CAVEMAN_HOME: join(temp, 'caveman-home') }
 await mkdir(env.CAVEMAN_HOME)
-await writeFile(join(env.CAVEMAN_HOME, 'cloud.json'), JSON.stringify({ modules: { browse: false, scripts: false } }))
+await writeFile(join(env.CAVEMAN_HOME, 'cloud.json'), JSON.stringify({ modules: { browse: false, scripts: false }, execute: { mcp: false } }))
 if (process.env.DSH_TEST_ENTRY) env.ELECTRON_RUN_AS_NODE = '1'
 delete env.DSH_PROFILE
 const dsh = args => run(executable, [...prefix, ...args], { env, cwd: temp, timeout: 240000, maxBuffer: 4 * 1024 * 1024, windowsHide: true })

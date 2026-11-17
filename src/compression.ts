@@ -34,6 +34,11 @@ function textBlocks(event: SessionEvent): { index: number; text: string }[] {
   return event.data.message.content.flatMap((block, index) => block.type === 'text' ? [{ index, text: block.text }] : [])
 }
 
+function isManagedTool(name: string): boolean {
+  return name === 'caveman_retrieve' || name.startsWith('mcp__caveman__') || name.startsWith('mcp__caveman_browse__') ||
+    /^mcp__.+__(?:caveman_retrieve|browser_recover)$/u.test(name)
+}
+
 function originalForHandle(session: Session, handle: string): { text: string; sourceId: string } | undefined {
   for (const event of session.snapshotEvents()) {
     const block = textBlocks(event).find(candidate => MARKER.exec(candidate.text)?.[1] === handle)
@@ -257,7 +262,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
       const blocks = textBlocks(event).filter(block => block.text.length >= MINIMUM_TEXT_LENGTH && !MARKER.test(block.text))
       if (!blocks.length) continue
       const toolName = toolNames.get(event.data.message.toolCallId)
-      if (!toolName || toolName === tool.name) continue
+      if (!toolName || isManagedTool(toolName)) continue
       eligible.push({ seq, event, blocks })
     }
     if (!eligible.length) return decision

@@ -381,6 +381,56 @@ test('a changing session surface invalidates an in-flight compression plan', { s
   }
 })
 
+test('recovery tool outputs are not compressed again', { skip: !proxyBinary }, async () => {
+  const service = await startProxy()
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
+  const ctx = new Context()
+  const names = ['mcp__caveman__caveman_retrieve', 'mcp__caveman_browse__browser_recover', 'mcp__caveman__caveman_toon_decode']
+  class RecoveryAdapter extends LlmAdapter {
+    requests = []
+    constructor(name) { super(); this.name = name }
+    async resolveModel(provider, model) { return { provider, id: model, name: model } }
+    async *stream(options) {
+      this.requests.push(options)
+      const chunks = this.requests.length === 1 ? call('recovery-output', this.name, {}) : [{ type: 'finish', reason: { kind: 'stop' } }]
+      for (const chunk of chunks) yield chunk
+    }
+  }
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: true, middlewareEndpoint: service.endpoint })
+    for (const [index, name] of names.entries()) {
+      ctx.tools.register(defineTool({
+        name, description: 'Return recovered content.', parameters: {},
+        output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+        async execute() { return original },
+      }))
+      const adapter = new RecoveryAdapter(name)
+      const provider = `recover-${index}`
+      ctx.llm.registerAdapter([provider], adapter)
+      const agent = await ctx.agentLoop.create(`recovery-tool-${index}`, { provider, model: 'mock' })
+      agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Recover the content.' }] }))
+      await agent.whenIdle()
+      const result = adapter.requests[1].messages.find(message => message.role === 'tool' && message.toolCallId === 'recovery-output')
+      assert.equal(result.content[0].text, original, `${name} returns the requested original`)
+    }
+  } finally {
+    await ctx.fiber.dispose()
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    await service.close()
+  }
+})
+
 test('the original remains recoverable from the session if the proxy stops', { skip: !proxyBinary }, async () => {
   await exerciseRecovery(true)
 })
