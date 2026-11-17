@@ -106,7 +106,7 @@ output 模块和 Core 启用时，原生编码规则会加入系统提示词。�
     middlewareEndpoint: 'http://127.0.0.1:8787'
 ```
 
-成功的原生工具结果中，不少于 2048 个 UTF-16 代码单元的文本块可参与压缩，其余内容保持不变。只有模型可以调用 `caveman_retrieve` 时才会提供恢复句柄。原文保留在会话日志中，模型请求准备好后会恢复到可见会话；运行时不可用时，仍可从会话恢复精确分页。
+成功的工具结果中，不少于 2048 个 UTF-16 代码单元的文本块可参与压缩，包括 `run_code` 的结果；其余内容保持不变。只有模型能够直接或通过程序 SDK 调用 `caveman_retrieve` 时才会提供恢复句柄。原文保留在会话日志中，模型请求准备好后会恢复到可见会话；运行时不可用时，仍可从会话恢复精确分页。
 
 ### Auto 自动选模
 
@@ -187,7 +187,7 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 
 - Auto 需要配置 pi-ai provider、Caveman 代理、Cloud 登录和 OpenAI 凭证；集成测试使用本地模拟服务。
 - Browse 需要 MCP manager、`caveman-browse` 和 Chrome；Blocks 需要 `caveman-blocks` 与本地工作区。
-- 原生压缩处理原生工具结果中的文本块。离线恢复提供精确分页，按文本查询需要 middleware。
+- 压缩处理工具结果中的文本块。离线恢复提供精确分页，按文本查询需要 middleware。
 - 部分技能需要额外的 CLI、账号或 agent 配置。
 - Cavecrew 的检查角色使用读取、搜索和只读 Git 工具；构建角色可编辑现有文件，限两个文件路径。
 

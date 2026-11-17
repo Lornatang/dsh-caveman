@@ -8,10 +8,10 @@ export function registerMemoryRecovery(ctx: Context, binary: string): void {
   if (ctx.tools.get('cavemem_recover')) return
   const tool: ToolDefinition = {
     name: 'cavemem_recover',
-    description: 'Read the exact original for a recovery_handle returned by cavemem_recall.',
+    description: 'Read the exact original for a recovery_handle returned by cavemem_recall. The handle has the form ccr_ followed by 32 lowercase hexadecimal characters.',
     parameters: {
       type: 'object', additionalProperties: false, required: ['handle'],
-      properties: { handle: { type: 'string', pattern: '^ccr_[a-f0-9]{32}$' } },
+      properties: { handle: { type: 'string' } },
     },
     timeoutMs: 15_000,
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] },

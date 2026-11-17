@@ -5,12 +5,19 @@ import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { ResolvedToolSet, ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { MiddlewareRuntime, recoveryInputSchema, recoveryToolDescription, type Optimization, type RetrieveArgs, type Scope } from '@caveman-ai/sdk/middleware'
+import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import { MiddlewareRuntime, recoveryToolDescription, type Optimization, type RetrieveArgs, type Scope } from '@caveman-ai/sdk/middleware'
 
 const HANDLE = /^cmw_[a-f0-9]{48}$/u
 const MARKER = /\[caveman: shortened; exact original via caveman_retrieve handle=(cmw_[a-f0-9]{48})/u
 const MINIMUM_TEXT_LENGTH = 2048
 const ADAPTER = { id: 'dsh', version: '0.1.0', framework_version: 'unknown', serialization_revision: 'dsh-session-v1' }
+// DSH's supported schema subset omits numeric and regex constraints. Enforce
+// those constraints in parseArgs while exposing a usable SDK declaration.
+const RECOVERY_PARAMETERS = {
+  type: 'object', additionalProperties: false, required: ['handle'],
+  properties: { handle: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' }, query: { type: 'string' } },
+}
 
 function scopeFor(agent: Agent): Scope {
   return { namespace: 'dsh-caveman', session_id: String(agent.session.id), branch_id: 'main', cache_epoch: '0' }
@@ -155,6 +162,23 @@ export function planCompressionBatches<T extends { bytes: number; segments: read
   return batches
 }
 
+type RecoveryExposure = { kind: 'direct' } | { kind: 'program'; sdk: string; transport: PromptAssembly['tools'][number] }
+
+/** Only shorten a result when the actual assembly exposes recovery to the model. */
+function recoveryExposure(assembly: PromptAssembly, tool: ToolDefinition): RecoveryExposure | undefined {
+  const direct = assembly.tools.find(entry => entry.name === tool.name)
+  if (direct && direct.description === tool.description && isDeepStrictEqual(direct.parameters, tool.parameters)) return { kind: 'direct' }
+  const transport = assembly.tools.find(entry => entry.name === 'run_code')
+  const section = assembly.sections.find(entry => entry.name === 'tools:sdk' && entry.interpolate === false)
+  if (!transport || !section || !section.text.includes(tool.description)) return undefined
+  const sdk = section.text
+  const typescript = /(?:^|\n)  caveman_retrieve: \{\n    handle: string;\n    offset\?: number;\n    limit\?: number;\n    query\?: string;\n  \};(?:\n|$)/u.test(sdk) &&
+    /interface ToolOutputMap \{[\s\S]*?\n  caveman_retrieve: string;/u.test(sdk)
+  const python = /class (\w+)\(TypedDict\):\n    handle: str\n    offset: NotRequired\[int\]\n    limit: NotRequired\[int\]\n    query: NotRequired\[str\]/u.exec(sdk)
+  if (!typescript && !(python && sdk.includes(`async def caveman_retrieve(self, args: ${python[1]}) -> str:`))) return undefined
+  return { kind: 'program', sdk, transport }
+}
+
 /** Install recoverable compression using the middleware protocol. */
 export function registerCompression(ctx: Context, endpoint: string, automatic?: {
   fetch: typeof fetch
@@ -163,6 +187,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
   const runtime = new MiddlewareRuntime({ endpoint, mode: 'compress', ...(automatic ? { fetch: automatic.fetch } : {}) })
   const pending = new Map<string, {
     session: Session
+    exposure: RecoveryExposure
     replacements: { seq: SessionSeq; original: SessionEvent<'tool/result'>; optimization: Optimization; sentBlocks: { index: number; text: string }[] }[]
     optimizations: Map<Optimization, boolean>
   }>()
@@ -186,8 +211,8 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     return [...work.optimizations].filter(([, applied]) => applied).map(([optimization]) => optimization)
   }
   const tool: ToolDefinition = {
-    name: 'caveman_retrieve', description: recoveryToolDescription,
-    parameters: structuredClone(recoveryInputSchema) as unknown as Record<string, unknown>,
+    name: 'caveman_retrieve', description: `${recoveryToolDescription} Offset must be nonnegative; limit must be 4–262144 bytes; query must be at most 1024 characters.`,
+    parameters: structuredClone(RECOVERY_PARAMETERS),
     output: {
       schema: { type: 'string' },
       render: (_args, value) => [{ type: 'text', text: String(value) }],
@@ -224,8 +249,12 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
       const coverage = projectionCoverage(work.replacements.map(replacement => ({
         callId: replacement.original.data.message.toolCallId, blocks: replacement.sentBlocks,
       })), options.messages)
-      const visible = options.tools?.find(entry => entry.name === tool.name)
-      const valid = visible && visible.description === tool.description && isDeepStrictEqual(visible.parameters, tool.parameters)
+      const visible = options.tools?.find(entry => entry.name === (work.exposure.kind === 'direct' ? tool.name : 'run_code'))
+      const lastSystem = options.messages.filter(message => message.role === 'system' && message.content.some(block => block.type === 'text' && block.text)).at(-1)
+      const systemText = lastSystem?.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+      const valid = work.exposure.kind === 'direct'
+        ? visible && visible.description === tool.description && isDeepStrictEqual(visible.parameters, tool.parameters)
+        : visible && isDeepStrictEqual(visible, work.exposure.transport) && systemText?.includes(work.exposure.sdk)
       const restored = restore(work.session)
       if (coverage !== 'none' && (coverage !== 'complete' || !valid)) {
         throw new Error('dsh-caveman: compressed results or their recovery tool were not available for the request')
@@ -249,7 +278,11 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     const session = agent.session
     if (pending.has(String(session.id))) restore(session)
     const toolNames = new Map<string, string>()
+    const managedCalls = new Set<string>()
     for (const event of session.snapshotEvents()) {
+      const dispatch = event as unknown as { type: string; data: { rootCallId?: unknown; name?: unknown } }
+      if (dispatch.type === 'tool/ptc-dispatch' && typeof dispatch.data.rootCallId === 'string' &&
+        typeof dispatch.data.name === 'string' && isManagedTool(dispatch.data.name)) managedCalls.add(dispatch.data.rootCallId)
       if (event.type !== 'assistant/message') continue
       for (const block of event.data.message.content) {
         if (block.type === 'tool-call' && !toolNames.has(block.id)) toolNames.set(block.id, block.name)
@@ -262,13 +295,14 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
       const blocks = textBlocks(event).filter(block => block.text.length >= MINIMUM_TEXT_LENGTH && !MARKER.test(block.text))
       if (!blocks.length) continue
       const toolName = toolNames.get(event.data.message.toolCallId)
-      if (!toolName || isManagedTool(toolName)) continue
+      if (!toolName || isManagedTool(toolName) || managedCalls.has(event.data.message.toolCallId)) continue
       eligible.push({ seq, event, blocks })
     }
     if (!eligible.length) return decision
     const assembly = await ctx.systemPrompt.assemble({ scope: agent, agent, modelSelection, toolSet, signal })
-    const published = assembly.tools.find(entry => entry.name === tool.name)
-    if (!published || published.description !== tool.description || !isDeepStrictEqual(published.parameters, tool.parameters)) return decision
+    const exposure = recoveryExposure(assembly, tool)
+    if (!exposure) return decision
+    const published = { name: tool.name, description: tool.description, parameters: tool.parameters }
     const scope = scopeFor(agent)
     const binding = runtime.recovery(scope)
     if (!binding) return decision
@@ -326,7 +360,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
           surfaceOp: { op: 'replace', startSeq: candidate.seq, endSeq: candidate.seq }, sourceEventSeqs: [candidate.seq],
         })
         const key = String(session.id)
-        const work = pending.get(key) ?? { session, replacements: [], optimizations: new Map<Optimization, boolean>() }
+        const work = pending.get(key) ?? { session, exposure, replacements: [], optimizations: new Map<Optimization, boolean>() }
         work.optimizations.set(optimization, true)
         work.replacements.push({ seq: replaced.seq, original: candidate.event, optimization, sentBlocks: [...changes].map(([index, text]) => ({ index, text })) })
         pending.set(key, work)

@@ -106,7 +106,7 @@ Start the local Caveman middleware in `compress` mode. With the `input` module e
     middlewareEndpoint: 'http://127.0.0.1:8787'
 ```
 
-Text blocks of at least 2048 UTF-16 code units in successful native tool results are eligible; other blocks remain intact. The model receives a recovery handle only when `caveman_retrieve` is callable. The original remains in the session log and is restored to the visible session after the model request is prepared. If the runtime becomes unavailable, the session can still return exact original pages.
+Text blocks of at least 2048 UTF-16 code units in successful tool results are eligible, including `run_code` results; other blocks remain intact. The model receives a recovery handle only when `caveman_retrieve` is callable directly or through the program SDK. The original remains in the session log and is restored to the visible session after the model request is prepared. If the runtime becomes unavailable, the session can still return exact original pages.
 
 ### Auto model selection
 
@@ -187,7 +187,7 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 
 - Auto requires a configured pi-ai provider, Caveman proxy, Cloud login, and OpenAI credential. The integration tests use local mock services.
 - Browse requires the MCP manager, `caveman-browse`, and Chrome. Blocks requires `caveman-blocks` and a local workspace.
-- Native compression handles text blocks in native tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
+- Compression handles text blocks in tool results. Offline recovery returns exact pages; text-query recovery requires the middleware.
 - Some skills require additional CLI, account, or agent setup.
 - Cavecrew's inspection roles use read, search, and read-only Git tools; the builder can edit existing files and is limited to two file paths.
 

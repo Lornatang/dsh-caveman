@@ -13,9 +13,13 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
+import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import * as plugin from '../lib/index.js'
 
 const proxyBinary = process.env.CAVEMAN_PROXY_BINARY
@@ -154,6 +158,118 @@ async function exerciseRecovery(stopBeforeRecovery, denyRecovery = false, failRe
 
 test('DSH compresses recoverably while preserving the original session event', { skip: !proxyBinary }, async () => {
   await exerciseRecovery(false)
+})
+
+async function exercisePtcRecovery({ stopBeforeRecovery = false, denyRecovery = false, omitSdk = false } = {}) {
+  const service = await startProxy()
+  const optimizePayloads = []
+  const destination = new URL(service.endpoint)
+  const relay = createHttpServer((incoming, outgoing) => {
+    if (incoming.url?.endsWith('/optimize')) {
+      const chunks = []
+      incoming.on('data', chunk => chunks.push(chunk))
+      incoming.on('end', () => optimizePayloads.push(JSON.parse(Buffer.concat(chunks).toString('utf8'))))
+    }
+    const request = httpRequest({ hostname: destination.hostname, port: destination.port, path: incoming.url, method: incoming.method, headers: incoming.headers, agent: false }, response => {
+      outgoing.writeHead(response.statusCode ?? 500, response.headers)
+      response.pipe(outgoing)
+    })
+    request.on('error', () => { if (!outgoing.headersSent) outgoing.writeHead(502); outgoing.end() })
+    incoming.pipe(request)
+  })
+  await new Promise((resolve, reject) => relay.listen(0, '127.0.0.1', resolve).on('error', reject))
+  const endpoint = `http://127.0.0.1:${relay.address().port}`
+  const previousHome = process.env.CAVEMAN_HOME
+  process.env.CAVEMAN_HOME = service.home
+  const ctx = new Context()
+  class TestRuntime extends PtcRuntime {
+    language = 'typescript'
+    isolation = 'test'
+    resolve(request) { return { ...request, cwd: request.cwd ?? service.home, timeoutMs: request.timeoutMs ?? 120_000 } }
+    async run(request) {
+      if (request.program.startsWith('recover:')) {
+        const tools = request.bindings.find(binding => binding.global === 'tools').functions
+        return { logs: [await tools.caveman_retrieve({ handle: request.program.slice('recover:'.length) })] }
+      }
+      return { logs: [original] }
+    }
+  }
+  class PtcAdapter extends LlmAdapter {
+    requests = []
+    async resolveModel(provider, model) { return { provider, id: model, name: model } }
+    async *stream(options) {
+      this.requests.push(options)
+      let chunks
+      if (this.requests.length === 1) chunks = call('program-output', 'run_code', { code: 'output', description: 'Read the sample' })
+      else if (this.requests.length === 2) {
+        const text = options.messages.filter(message => message.role === 'tool').at(-1)?.content?.[0]?.text ?? ''
+        const handle = /handle=(cmw_[a-f0-9]{48})/.exec(text)?.[1]
+        if (handle && stopBeforeRecovery) await service.stop()
+        chunks = handle ? call('program-recover', 'run_code', { code: `recover:${handle}`, description: 'Recover original' }) : [{ type: 'finish', reason: { kind: 'stop' } }]
+      } else chunks = [{ type: 'finish', reason: { kind: 'stop' } }]
+      yield* chunks
+    }
+  }
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(LocalFileSystem, { cwd: service.home })
+    await ctx.plugin(WorkingDirectory, { defaultDirectory: service.home })
+    await ctx.plugin(TestRuntime)
+    await ctx.plugin(PtcToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: true, middlewareEndpoint: endpoint })
+    if (omitSdk) ctx.on('system-prompt/assemble', async (presentation, context, next) => {
+      const result = await next()
+      return { ...result, sections: result.sections.filter(section => section.name !== 'tools:sdk') }
+    })
+    const adapter = new PtcAdapter()
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = await ctx.agentLoop.create('ptc-compression-session', { provider: 'mock', model: 'mock' })
+    if (denyRecovery) agent.ctx.get('tools').restrict({ deny: ['caveman_retrieve'] })
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the sample.' }] }))
+    await agent.whenIdle()
+    if (denyRecovery || omitSdk) {
+      assert.equal(adapter.requests.length, 2)
+      assert.equal(adapter.requests[1].messages.filter(message => message.role === 'tool').at(-1).content[0].text, original)
+      return
+    }
+    assert.equal(adapter.requests.length, 3, 'model can recover the compressed result through run_code')
+    const system = adapter.requests[1].messages.filter(message => message.role === 'system').flatMap(message => message.content).map(block => block.text ?? '').join('\n')
+    assert.match(system, /caveman_retrieve: \{[\s\S]*?handle: string/u, 'SDK describes recovery arguments')
+    const compressed = adapter.requests[1].messages.filter(message => message.role === 'tool').at(-1).content[0].text
+    assert.ok(compressed.length < original.length / 4)
+    const recovered = adapter.requests[2].messages.filter(message => message.role === 'tool').at(-1).content[0].text
+    assert.equal(JSON.parse(recovered).text, original)
+    if (!stopBeforeRecovery) {
+      const result = agent.session.snapshotEvents().find(event => event.type === 'tool/result' && event.data.message.toolCallId === 'program-recover')
+      assert.ok(result)
+      const ids = optimizePayloads.flatMap(payload => (payload.segments ?? payload.candidates ?? []).map(segment => segment.source_id ?? segment.sourceId))
+      assert.ok(ids.length, JSON.stringify(optimizePayloads.map(payload => Object.keys(payload))))
+      assert.ok(!ids.includes(`seq-${result.seq}`), 'a recovery result is not sent back for compression')
+    }
+  } finally {
+    await ctx.fiber.dispose()
+    await new Promise(resolve => relay.close(resolve))
+    if (previousHome === undefined) delete process.env.CAVEMAN_HOME
+    else process.env.CAVEMAN_HOME = previousHome
+    await service.close()
+  }
+}
+
+test('programmatic tool execution recovers a compressed run_code result', { skip: !proxyBinary }, async () => {
+  await exercisePtcRecovery()
+  await exercisePtcRecovery({ stopBeforeRecovery: true })
+})
+
+test('programmatic compression requires an allowed, visible recovery binding', { skip: !proxyBinary }, async () => {
+  await exercisePtcRecovery({ denyRecovery: true })
+  await exercisePtcRecovery({ omitSdk: true })
 })
 
 test('a verified local runtime enables compression and offline recovery automatically', { skip: !proxyBinary }, async () => {
