@@ -2,6 +2,14 @@ type Binary = 'blocks' | 'browse';
 type Module = 'scripts' | 'browse' | 'input';
 /** Find a configured binary, PATH command, or the CLI's installation. */
 export declare function findCavemanBinary(kind: Binary, configured?: string, env?: NodeJS.ProcessEnv): string | undefined;
+/** Read the module switches and native coding policy in one configuration snapshot. */
+export declare function runtimeSettings(env?: NodeJS.ProcessEnv): {
+    input: boolean;
+    scripts: boolean;
+    browse: boolean;
+    core: boolean;
+    coreLeanBuild: boolean;
+};
 /** Modules default to on; a saved explicit off is respected. */
 export declare function moduleEnabled(kind: Module, env?: NodeJS.ProcessEnv): boolean;
 /** Verify that the loopback listener matches the runtime's private run-state record. */

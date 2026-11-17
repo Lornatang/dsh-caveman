@@ -46,8 +46,11 @@ export function findCavemanBinary(kind: Binary, configured?: string, env: NodeJS
   return executable(local) ? local : undefined
 }
 
-/** Modules default to on; a saved explicit off is respected. */
-export function moduleEnabled(kind: Module, env: NodeJS.ProcessEnv = process.env): boolean {
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function configDocument(env: NodeJS.ProcessEnv): Record<string, unknown> {
   try {
     const home = env.CAVEMAN_HOME ?? join(homedir(), '.caveman')
     let raw: string
@@ -55,19 +58,43 @@ export function moduleEnabled(kind: Module, env: NodeJS.ProcessEnv = process.env
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       raw = readFileSync(join(homedir(), '.caveman-cloud', 'config.json'), 'utf8')
     }
-    const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/u, ''))
-    const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-    const document = object(parsed)
-    const selected = object(document.modules)[kind]
-    if (typeof selected === 'boolean') return selected
-    if (kind === 'input') {
-      const setting = object(document.think).mode ?? object(document.wrap).mode
-      return setting !== 'record'
-    }
-    if (kind !== 'browse') return true
-    const setting = object(document.execute).browse_tool ?? object(document.wrap).browse
-    return setting !== false && !(typeof setting === 'string' && ['0', 'false', 'no', 'off'].includes(setting.trim().toLowerCase()))
-  } catch { return true }
+    return object(JSON.parse(raw.replace(/^\uFEFF/u, '')))
+  } catch { return {} }
+}
+
+function booleanSetting(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return undefined
+}
+
+/** Read the module switches and native coding policy in one configuration snapshot. */
+export function runtimeSettings(env: NodeJS.ProcessEnv = process.env): { input: boolean; scripts: boolean; browse: boolean; core: boolean; coreLeanBuild: boolean } {
+  const document = configDocument(env)
+  const modules = object(document.modules)
+  const think = object(document.think)
+  const wrap = object(document.wrap)
+  const explicit = (value: unknown): boolean | undefined => typeof value === 'boolean' ? value : undefined
+  const input = explicit(modules.input) ?? ((think.mode ?? wrap.mode) !== 'record')
+  const scripts = explicit(modules.scripts) ?? true
+  const browse = explicit(modules.browse) ?? booleanSetting(object(document.execute).browse_tool ?? wrap.browse) ?? true
+  const configuredCore = booleanSetting(env.CAVEMAN_CORE) ?? booleanSetting(think.core ?? wrap.core) ?? explicit(modules.output) ?? true
+  const profile = env.CAVEMAN_NATIVE_PROFILE?.trim().toLowerCase()
+  const profiles = ['record-only', 'core', 'core-lean-build', 'ledger', 'ccr-masking', 'cache-aware', 'full-safe', 'full-max']
+  const nativeMode = env.CAVEMAN_NATIVE_MODE?.trim().toLowerCase()
+  const proxyMode = env.CAVEMAN_WRAP_MODE ?? think.mode ?? wrap.mode ?? 'compress'
+  const activeProfile = !profile || (profiles.includes(profile) && profile !== 'record-only')
+  const activeMode = nativeMode ? ['safe', 'max'].includes(nativeMode) : proxyMode !== 'record'
+  const core = configuredCore && activeProfile && activeMode
+  return { input, scripts, browse, core, coreLeanBuild: core && profile === 'core-lean-build' }
+}
+
+/** Modules default to on; a saved explicit off is respected. */
+export function moduleEnabled(kind: Module, env: NodeJS.ProcessEnv = process.env): boolean {
+  return runtimeSettings(env)[kind]
 }
 
 function localOrigin(endpoint: string): URL | undefined {

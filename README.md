@@ -53,6 +53,7 @@ The `add` command composes the bundle into the profile. Its patches insert the `
 | Surface | Provided by |
 |---|---|
 | Caveman skills and session-specific response styles | `src/skills.ts`, `src/mode.ts` |
+| Native coding policy | `src/index.ts` |
 | `/caveman-stats` for recorded session usage | `src/stats.ts` |
 | Recoverable tool-result compression and `caveman_retrieve` | `src/compression.ts` and the middleware runtime |
 | Auto model selection | DSH pi-ai provider and Caveman proxy |
@@ -85,6 +86,8 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, `/caveman status`, or `stop caveman`. Mode changes belong to the current session. All 22 Caveman skills are available for explicit invocation; the model can also invoke the skills whose metadata permits it.
 
 `defaultMode` accepts `caveman`, `ultracave`, `megacave`, `manual`, or `off`. An explicit profile value wins; otherwise the resolver checks `CAVEMAN_DEFAULT_MODE`, project configuration, and user configuration before falling back to `caveman`.
+
+The native coding policy is included in the system prompt when the output module and Core are active. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables it; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
 
 `/caveman-stats` reports usage recorded on committed assistant messages in the current session. It identifies missing usage and excludes uncommitted attempts. Savings remain unknown without a comparison.
 

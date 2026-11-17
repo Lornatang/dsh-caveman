@@ -145,6 +145,7 @@ test('Cavecrew presets load original personas and restrict each real DSH agent',
       }
       if (role === 'builder') assert.equal((await runGit({ operation: 'diff' })).isError, true)
       const prompt = await ctx.systemPrompt.assemble(assembleContextFor(agent))
+      assert.ok(!prompt.sections.find(section => section.name === 'caveman:core')?.text, 'Cavecrew keeps its specialized policy')
       const persona = prompt.sections.find(section => section.name === 'deployment:persona-prefix')
       const original = await readFile(new URL(`../vendor/caveman/agents/cavecrew-${role}.md`, import.meta.url), 'utf8')
       const body = original.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '').trim()

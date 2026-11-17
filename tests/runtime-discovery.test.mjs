@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import test from 'node:test'
-import { findCavemanBinary, guardedRuntimeFetch, moduleEnabled } from '../lib/runtime.js'
+import { findCavemanBinary, guardedRuntimeFetch, moduleEnabled, runtimeSettings } from '../lib/runtime.js'
 
 test('runtime discovery honors overrides, PATH, the Caveman home, and module switches', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-caveman-discovery-'))
@@ -42,6 +42,15 @@ test('runtime discovery honors overrides, PATH, the Caveman home, and module swi
     assert.equal(moduleEnabled('input', env), false)
     await writeFile(join(home, 'cloud.json'), JSON.stringify({ modules: { input: true }, think: { mode: 'record' } }))
     assert.equal(moduleEnabled('input', env), true)
+    assert.equal(runtimeSettings(env).core, false, 'record mode disables the native coding policy')
+    await writeFile(join(home, 'cloud.json'), JSON.stringify({ modules: { output: false } }))
+    assert.equal(runtimeSettings(env).core, false)
+    assert.equal(runtimeSettings({ ...env, CAVEMAN_CORE: 'on' }).core, true)
+    assert.equal(runtimeSettings({ ...env, CAVEMAN_NATIVE_MODE: 'record', CAVEMAN_CORE: 'on' }).core, false)
+    await writeFile(join(home, 'cloud.json'), JSON.stringify({ modules: { output: true }, think: { core: false } }))
+    assert.equal(runtimeSettings(env).core, false, 'the effective core setting wins when stored values disagree')
+    await writeFile(join(home, 'cloud.json'), '{}')
+    assert.equal(runtimeSettings(env).core, true)
     await writeFile(join(home, 'cloud.json'), '{invalid')
     assert.equal(moduleEnabled('browse', env), true)
   } finally {

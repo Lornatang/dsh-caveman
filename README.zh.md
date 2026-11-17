@@ -53,6 +53,7 @@ dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 | 暴露面 | 提供方 |
 |---|---|
 | Caveman 技能与按会话隔离的回答风格 | `src/skills.ts`、`src/mode.ts` |
+| 原生编码规则 | `src/index.ts` |
 | 报告当前会话已记录用量的 `/caveman-stats` | `src/stats.ts` |
 | 可恢复的工具结果压缩与 `caveman_retrieve` | `src/compression.ts` 和 middleware 运行时 |
 | Auto 自动选模 | DSH pi-ai provider 和 Caveman 代理 |
@@ -85,6 +86,8 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 可使用 `/caveman`、`/ultracave`、`/megacave`、`/caveman ultra`、`/caveman wenyan`、`/caveman status` 和 `stop caveman`。模式切换只影响当前会话。22 个 Caveman 技能均可由用户显式调用，元数据允许的技能也可由模型调用。
 
 `defaultMode` 可设为 `caveman`、`ultracave`、`megacave`、`manual` 或 `off`。profile 的显式配置优先；否则依次检查 `CAVEMAN_DEFAULT_MODE`、项目配置和用户配置，均未设置时使用 `caveman`。
+
+output 模块和 Core 启用时，原生编码规则会加入系统提示词。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
 
 `/caveman-stats` 报告当前会话已提交 assistant 消息中记录的用量，说明哪些消息没有用量，排除未提交的尝试。没有对照数据时，节省量为未知。
 
