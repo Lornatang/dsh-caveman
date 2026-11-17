@@ -27,7 +27,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Install the bundle into the profile whose sessions should use Caveman. Node.js 22.19 or newer and DSH 0.2.2-rc.3 or newer are required.
+Install the bundle into the profile whose sessions should use Caveman. Node.js 22.19 or newer and DSH are required.
 
 ### Install into a profile
 

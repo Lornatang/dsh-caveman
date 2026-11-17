@@ -14,7 +14,7 @@
   ],
   "engines": {
     "node": ">=22.19",
-    "dsh": ">=0.2.2-rc.3"
+    "dsh": "*"
   },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.3"
+    "@deepseek-ai/dsh-llm": "*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",

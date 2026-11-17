@@ -10,7 +10,7 @@ import { MiddlewareRuntime, recoveryInputSchema, recoveryToolDescription, type O
 const HANDLE = /^cmw_[a-f0-9]{48}$/u
 const MARKER = /\[caveman: shortened; exact original via caveman_retrieve handle=(cmw_[a-f0-9]{48})/u
 const MINIMUM_TEXT_LENGTH = 2048
-const ADAPTER = { id: 'dsh', version: '0.1.0', framework_version: '0.2.2-rc.3', serialization_revision: 'dsh-session-v1' }
+const ADAPTER = { id: 'dsh', version: '0.1.0', framework_version: 'unknown', serialization_revision: 'dsh-session-v1' }
 
 function scopeFor(agent: Agent): Scope {
   return { namespace: 'dsh-caveman', session_id: String(agent.session.id), branch_id: 'main', cache_epoch: '0' }

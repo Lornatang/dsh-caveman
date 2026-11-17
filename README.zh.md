@@ -27,7 +27,7 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-把 bundle 安装到需要使用 Caveman 的会话所在的 profile。需要 Node.js 22.19 或更新版本，以及 DSH 0.2.2-rc.3 或更新版本。
+把 bundle 安装到需要使用 Caveman 的会话所在的 profile。需要 Node.js 22.19 或更新版本以及 DSH。
 
 ### 安装到 profile
 
