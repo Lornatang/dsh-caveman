@@ -54,9 +54,10 @@ The `add` command composes the bundle into the profile. Its patches insert the `
 |---|---|
 | Caveman skills and session-specific response styles | `src/skills.ts`, `src/mode.ts` |
 | Native coding policy | `src/index.ts` |
-| `/caveman-stats` for recorded session usage | `src/stats.ts` |
+| `/caveman-stats` for recorded session and historical usage | `src/stats.ts` |
 | Recoverable tool-result compression and `caveman_retrieve` | `src/compression.ts` and the middleware runtime |
 | Compression, recovery, statistics, and TOON MCP tools | DSH MCP manager and `caveman-mcp` |
+| Local memory and exact recovery | DSH MCP manager and `cavemem` |
 | Auto model selection | DSH pi-ai provider and Caveman proxy |
 | Shell suggestions | `src/blocks.ts` and Blocks |
 | `mcp__caveman_browse__*` browser tools | DSH MCP manager and Browse |
@@ -82,6 +83,7 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 | `blocksBinary` | auto-detected | Override the absolute path to `caveman-blocks`. |
 | `browseBinary` | auto-detected | Override the absolute path to `caveman-browse`; requires the DSH MCP manager. |
 | `mcpBinary` | auto-detected | Override the absolute path to `caveman-mcp`; requires the DSH MCP manager. |
+| `memoryBinary` | unset | Absolute path to `cavemem`; enables its local memory tools. |
 
 ### Voice and usage
 
@@ -91,7 +93,7 @@ Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, 
 
 The native coding policy is included in the system prompt when the output module and Core are active. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables it; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
 
-`/caveman-stats` reports usage recorded on committed assistant messages in the current session. It identifies missing usage and excludes uncommitted attempts. Savings remain unknown without a comparison.
+`/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for recently active sessions, and `--share` for a concise current-session report. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
 
 ### Recoverable compression
 
@@ -117,6 +119,8 @@ When Auto is selected and routing is enabled, the proxy sends the latest and pre
 ### MCP, Blocks and Browse
 
 When `caveman-mcp` is installed, the DSH MCP manager exposes the `mcp__caveman__*` tools `caveman_compress`, `caveman_retrieve`, `caveman_stats`, `caveman_toon_encode`, and `caveman_toon_decode`. The server uses the local Caveman recovery store for its handles. Set `CAVEMAN_MCP=off` to disable automatic registration.
+
+Set `memoryBinary` to the absolute path of `cavemem` to enable `mcp__cavemem__*` tools for remembering, recalling, revising, inspecting, and forgetting local facts. `cavemem_recover` returns the exact original behind a recall handle and requires the DSH subprocess and working-directory services. Memories persist in the local Caveman home.
 
 When `caveman-blocks` is installed, `bash` and `pwsh` calls can receive Blocks suggestions. Suggestions accompany the result and do not change the command. Blocks reads the local `.blocks` directory and may save scrubbed script observations and usage data; see its [telemetry settings](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md).
 
@@ -193,6 +197,6 @@ Changing voice or replacing and restoring a tool-result surface can change the c
 <details>
 <summary>Maintainer context</summary>
 
-`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_MCP_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
+`npm run typecheck` checks TypeScript; `npm test` builds and runs the tests. Set `CAVEMAN_PROXY_BINARY`, `CAVEMAN_MCP_BINARY`, `CAVEMEM_BINARY`, `CAVEMAN_BLOCKS_BINARY`, and `CAVEMAN_BROWSE_BINARY` to compatible executables and `CAVEMAN_BROWSE_CHROME` to Chrome to run the runtime integration tests. Auto's test also requires OpenSSL. `npm run test:dsh` installs, boots, and removes the pack in an isolated profile. `npm pack` runs the test suite through `prepack`. `npm run benchmark` measures skill discovery and session mode replay on synthetic input.
 
 </details>

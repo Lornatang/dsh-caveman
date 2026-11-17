@@ -35,7 +35,7 @@ function textBlocks(event: SessionEvent): { index: number; text: string }[] {
 }
 
 function isManagedTool(name: string): boolean {
-  return name === 'caveman_retrieve' || name.startsWith('mcp__caveman__') || name.startsWith('mcp__caveman_browse__') ||
+  return name === 'caveman_retrieve' || name === 'cavemem_recover' || name.startsWith('mcp__caveman__') || name.startsWith('mcp__caveman_browse__') || name.startsWith('mcp__cavemem__') ||
     /^mcp__.+__(?:caveman_retrieve|browser_recover)$/u.test(name)
 }
 

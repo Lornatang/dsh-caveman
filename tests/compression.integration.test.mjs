@@ -386,7 +386,7 @@ test('recovery tool outputs are not compressed again', { skip: !proxyBinary }, a
   const previousHome = process.env.CAVEMAN_HOME
   process.env.CAVEMAN_HOME = service.home
   const ctx = new Context()
-  const names = ['mcp__caveman__caveman_retrieve', 'mcp__caveman_browse__browser_recover', 'mcp__caveman__caveman_toon_decode']
+  const names = ['mcp__caveman__caveman_retrieve', 'mcp__caveman_browse__browser_recover', 'mcp__caveman__caveman_toon_decode', 'mcp__cavemem__cavemem_recall', 'cavemem_recover']
   class RecoveryAdapter extends LlmAdapter {
     requests = []
     constructor(name) { super(); this.name = name }

@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 
-type Binary = 'blocks' | 'browse' | 'mcp'
+type Binary = 'blocks' | 'browse' | 'mcp' | 'memory'
 type Module = 'scripts' | 'browse' | 'input'
 
 function executable(path: string): boolean {
@@ -30,7 +30,7 @@ export function findCavemanBinary(kind: Binary, configured?: string, env: NodeJS
     if (!isAbsolute(configured)) throw new Error(`dsh-caveman: ${kind}Binary must be an absolute path`)
     return configured
   }
-  const override = env[{ blocks: 'CAVEMAN_BLOCKS_BIN', browse: 'CAVEMAN_BROWSE_BIN', mcp: 'CAVEMAN_MCP_BIN' }[kind]]
+  const override = env[{ blocks: 'CAVEMAN_BLOCKS_BIN', browse: 'CAVEMAN_BROWSE_BIN', mcp: 'CAVEMAN_MCP_BIN', memory: 'CAVEMEM_BIN' }[kind]]
   if (override) {
     if (isAbsolute(override) || /[\\/]/u.test(override)) {
       const absolute = resolve(override)
@@ -38,7 +38,7 @@ export function findCavemanBinary(kind: Binary, configured?: string, env: NodeJS
     }
     return pathCommand(override, env)
   }
-  const name = `caveman-${kind}`
+  const name = kind === 'memory' ? 'cavemem' : `caveman-${kind}`
   const onPath = pathCommand(name, env)
   if (onPath) return onPath
   const filename = process.platform === 'win32' ? `${name}.exe` : name
@@ -72,7 +72,7 @@ function booleanSetting(value: unknown): boolean | undefined {
 }
 
 /** Read the module switches and native coding policy in one configuration snapshot. */
-export function runtimeSettings(env: NodeJS.ProcessEnv = process.env): { input: boolean; scripts: boolean; browse: boolean; mcp: boolean; core: boolean; coreLeanBuild: boolean } {
+export function runtimeSettings(env: NodeJS.ProcessEnv = process.env): { input: boolean; scripts: boolean; browse: boolean; mcp: boolean; memory: boolean; core: boolean; coreLeanBuild: boolean } {
   const document = configDocument(env)
   const modules = object(document.modules)
   const think = object(document.think)
@@ -83,6 +83,7 @@ export function runtimeSettings(env: NodeJS.ProcessEnv = process.env): { input: 
   const browse = explicit(modules.browse) ?? booleanSetting(object(document.execute).browse_tool ?? wrap.browse) ?? true
   const mcpMode = env.CAVEMAN_MCP ?? object(document.execute).mcp ?? wrap.mcp
   const mcp = mcpMode !== 'marker-only' && booleanSetting(mcpMode) !== false
+  const memory = booleanSetting(object(document.remember).mem) ?? true
   const configuredCore = booleanSetting(env.CAVEMAN_CORE) ?? booleanSetting(think.core ?? wrap.core) ?? explicit(modules.output) ?? true
   const profile = env.CAVEMAN_NATIVE_PROFILE?.trim().toLowerCase()
   const profiles = ['record-only', 'core', 'core-lean-build', 'ledger', 'ccr-masking', 'cache-aware', 'full-safe', 'full-max']
@@ -91,7 +92,7 @@ export function runtimeSettings(env: NodeJS.ProcessEnv = process.env): { input: 
   const activeProfile = !profile || (profiles.includes(profile) && profile !== 'record-only')
   const activeMode = nativeMode ? ['safe', 'max'].includes(nativeMode) : proxyMode !== 'record'
   const core = configuredCore && activeProfile && activeMode
-  return { input, scripts, browse, mcp, core, coreLeanBuild: core && profile === 'core-lean-build' }
+  return { input, scripts, browse, mcp, memory, core, coreLeanBuild: core && profile === 'core-lean-build' }
 }
 
 /** Modules default to on; a saved explicit off is respected. */

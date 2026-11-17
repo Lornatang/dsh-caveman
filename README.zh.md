@@ -54,9 +54,10 @@ dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
 |---|---|
 | Caveman 技能与按会话隔离的回答风格 | `src/skills.ts`、`src/mode.ts` |
 | 原生编码规则 | `src/index.ts` |
-| 报告当前会话已记录用量的 `/caveman-stats` | `src/stats.ts` |
+| 报告当前及历史会话已记录用量的 `/caveman-stats` | `src/stats.ts` |
 | 可恢复的工具结果压缩与 `caveman_retrieve` | `src/compression.ts` 和 middleware 运行时 |
 | 压缩、恢复、统计和 TOON MCP 工具 | DSH MCP manager 和 `caveman-mcp` |
+| 本地记忆与原文恢复 | DSH MCP manager 和 `cavemem` |
 | Auto 自动选模 | DSH pi-ai provider 和 Caveman 代理 |
 | Shell 命令建议 | `src/blocks.ts` 和 Blocks |
 | `mcp__caveman_browse__*` 浏览器工具 | DSH MCP manager 和 Browse |
@@ -82,6 +83,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 | `blocksBinary` | 自动查找 | 覆盖 `caveman-blocks` 的绝对路径。 |
 | `browseBinary` | 自动查找 | 覆盖 `caveman-browse` 的绝对路径；需要 DSH MCP manager。 |
 | `mcpBinary` | 自动查找 | 覆盖 `caveman-mcp` 的绝对路径；需要 DSH MCP manager。 |
+| `memoryBinary` | 未设置 | `cavemem` 的绝对路径；启用本地记忆工具。 |
 
 ### 回答模式与用量
 
@@ -91,7 +93,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 output 模块和 Core 启用时，原生编码规则会加入系统提示词。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
 
-`/caveman-stats` 报告当前会话已提交 assistant 消息中记录的用量，说明哪些消息没有用量，排除未提交的尝试。没有对照数据时，节省量为未知。
+`/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看近期活跃的会话，使用 `--share` 生成简短的当前会话报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
 
 ### 可恢复压缩
 
@@ -117,6 +119,8 @@ output 模块和 Core 启用时，原生编码规则会加入系统提示词。�
 ### MCP、Blocks 和 Browse
 
 安装 `caveman-mcp` 后，DSH MCP manager 会提供 `mcp__caveman__*` 工具：`caveman_compress`、`caveman_retrieve`、`caveman_stats`、`caveman_toon_encode` 和 `caveman_toon_decode`。服务使用本地 Caveman 恢复存储保存句柄。设置 `CAVEMAN_MCP=off` 可关闭自动注册。
+
+将 `memoryBinary` 设为 `cavemem` 的绝对路径后，可使用 `mcp__cavemem__*` 工具记住、检索、修订、查看和删除本地事实。`cavemem_recover` 可取回检索句柄对应的完整原文，需要 DSH subprocess 和 working-directory 服务。记忆保存在本地 Caveman 目录。
 
 安装 `caveman-blocks` 后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
 
@@ -193,6 +197,6 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 <details>
 <summary>维护者上下文</summary>
 
-`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_MCP_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
+`npm run typecheck` 检查 TypeScript；`npm test` 构建并运行测试。将 `CAVEMAN_PROXY_BINARY`、`CAVEMAN_MCP_BINARY`、`CAVEMEM_BINARY`、`CAVEMAN_BLOCKS_BINARY`、`CAVEMAN_BROWSE_BINARY` 分别设为兼容的可执行文件，并将 `CAVEMAN_BROWSE_CHROME` 设为 Chrome，可运行运行时集成测试。Auto 测试还需要 OpenSSL。`npm run test:dsh` 在隔离的 profile 中安装、启动并移除包；`npm pack` 通过 `prepack` 运行测试。`npm run benchmark` 使用合成输入测量技能发现和会话模式重放。
 
 </details>

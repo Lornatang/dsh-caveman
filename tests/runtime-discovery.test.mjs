@@ -52,9 +52,12 @@ test('runtime discovery honors overrides, PATH, the Caveman home, and module swi
     await writeFile(join(home, 'cloud.json'), '{}')
     assert.equal(runtimeSettings(env).core, true)
     assert.equal(runtimeSettings(env).mcp, true)
+    assert.equal(runtimeSettings(env).memory, true)
     assert.equal(runtimeSettings({ ...env, CAVEMAN_MCP: 'off' }).mcp, false)
     await writeFile(join(home, 'cloud.json'), JSON.stringify({ execute: { mcp: 'marker-only' } }))
     assert.equal(runtimeSettings(env).mcp, false)
+    await writeFile(join(home, 'cloud.json'), JSON.stringify({ remember: { mem: false } }))
+    assert.equal(runtimeSettings(env).memory, false)
     await writeFile(join(home, 'cloud.json'), '{invalid')
     assert.equal(moduleEnabled('browse', env), true)
   } finally {

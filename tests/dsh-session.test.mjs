@@ -108,7 +108,8 @@ test('the stats command reports only recorded usage from its own DSH session', a
     assert.equal(other.session.snapshotEvents().some(item => item.type === 'user/message' && item.data.source.kind === 'dsh-caveman-stats'), false)
     await send(other, '/caveman-stats --all')
     const otherReport = other.session.snapshotEvents().find(item => item.type === 'user/message' && item.data.source.kind === 'dsh-caveman-stats')
-    assert.match(otherReport.data.content[0].text, /Options are not supported in DSH; this report covers the current session only/)
+    assert.match(otherReport.data.content[0].text, /History unavailable; showing live sessions/)
+    assert.match(otherReport.data.content[0].text, /Sessions counted: 2/)
   } finally {
     await ctx.fiber.dispose()
   }
@@ -120,4 +121,28 @@ test('missing usage is reported as unavailable instead of zero', async () => {
   assert.match(report, /Messages with usage: 0 of 1/)
   assert.match(report, /Output tokens: unavailable/)
   assert.match(report, /Cache-read tokens: unavailable/)
+})
+
+test('session usage attributes recorded output to the active response mode', async () => {
+  const { sessionStats } = await import('../lib/stats.js')
+  const report = sessionStats([
+    { type: 'assistant/message', data: { message: {}, usage: { outputTokens: 2 } } },
+    { type: 'user/message', data: { source: { kind: 'dsh-caveman-mode', mode: 'ultracave' }, content: [] } },
+    { type: 'assistant/message', data: { message: {}, usage: { outputTokens: 7 } } },
+    { type: 'user/message', data: { source: { kind: 'dsh-caveman-mode', mode: 'off' }, content: [] } },
+    { type: 'assistant/message', data: { message: {}, usage: { outputTokens: 3 } } },
+  ], '')
+  assert.match(report, /ultracave: 7/)
+  assert.match(report, /off: 3/)
+  assert.match(report, /unattributed: 2/)
+})
+
+test('partial usage and shareable summaries do not claim an unknown total', async () => {
+  const { sessionStats } = await import('../lib/stats.js')
+  const events = [
+    { type: 'assistant/message', data: { message: {}, usage: { outputTokens: 7 } } },
+    { type: 'assistant/message', data: { message: {} } },
+  ]
+  assert.match(sessionStats(events, ''), /Output tokens: 7 known \(partial; total unavailable\)/)
+  assert.match(sessionStats(events, '--share'), /7 known \(partial; total unavailable\) output tokens; savings unknown/)
 })

@@ -1,4 +1,4 @@
-type Binary = 'blocks' | 'browse' | 'mcp';
+type Binary = 'blocks' | 'browse' | 'mcp' | 'memory';
 type Module = 'scripts' | 'browse' | 'input';
 /** Find a configured binary, PATH command, or the CLI's installation. */
 export declare function findCavemanBinary(kind: Binary, configured?: string, env?: NodeJS.ProcessEnv): string | undefined;
@@ -8,6 +8,7 @@ export declare function runtimeSettings(env?: NodeJS.ProcessEnv): {
     scripts: boolean;
     browse: boolean;
     mcp: boolean;
+    memory: boolean;
     core: boolean;
     coreLeanBuild: boolean;
 };

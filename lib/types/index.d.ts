@@ -23,6 +23,7 @@ export interface Config {
     blocksBinary?: string;
     browseBinary?: string;
     mcpBinary?: string;
+    memoryBinary?: string;
 }
 export declare const Config: z<Config>;
 /** Register skills and reinforce the selected mode per session. */

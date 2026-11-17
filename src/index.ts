@@ -11,8 +11,9 @@ import { createSkillProvider } from './skills.js'
 import { defaultModeFor, SessionModeTracker, type DefaultMode, type VoiceMode } from './mode.js'
 import { registerCompression } from './compression.js'
 import { registerBlocks } from './blocks.js'
-import { sessionStats } from './stats.js'
+import { statsReport } from './stats.js'
 import { findCavemanBinary, guardedRuntimeFetch, runtimeSettings, verifiedRuntime } from './runtime.js'
+import { registerMemoryRecovery } from './memory.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -24,7 +25,7 @@ declare module '@deepseek-ai/dsh-llm' {
 export const name = 'caveman'
 export const inject = ['skills', 'tools', 'systemPrompt', 'llm']
 
-export interface Config { defaultMode?: DefaultMode; inputCompression?: boolean; middlewareEndpoint?: string; blocksBinary?: string; browseBinary?: string; mcpBinary?: string }
+export interface Config { defaultMode?: DefaultMode; inputCompression?: boolean; middlewareEndpoint?: string; blocksBinary?: string; browseBinary?: string; mcpBinary?: string; memoryBinary?: string }
 export const Config: z<Config> = z.object({
   defaultMode: z.union([
     z.const('caveman'), z.const('ultracave'), z.const('megacave'), z.const('off'), z.const('manual'),
@@ -34,6 +35,7 @@ export const Config: z<Config> = z.object({
   blocksBinary: z.string().min(1),
   browseBinary: z.string().min(1),
   mcpBinary: z.string().min(1),
+  memoryBinary: z.string().min(1),
 })
 
 /** Register skills and reinforce the selected mode per session. */
@@ -68,13 +70,15 @@ export function apply(ctx: Context, config: Config = {}): void {
   if (blocks) registerBlocks(ctx, blocks)
   const browse = settings.browse ? findCavemanBinary('browse', config.browseBinary) : undefined
   const mcp = settings.mcp ? findCavemanBinary('mcp', config.mcpBinary) : undefined
-  const servers = [{ name: 'caveman', binary: mcp }, { name: 'caveman_browse', binary: browse }]
-    .filter((server): server is { name: string; binary: string } => server.binary !== undefined)
+  const memory = settings.mcp && settings.memory && config.memoryBinary ? findCavemanBinary('memory', config.memoryBinary) : undefined
+  if (memory) ctx.inject(['subprocess', 'workingDirectory'], scoped => registerMemoryRecovery(scoped, memory))
+  const servers = [{ name: 'caveman', binary: mcp, args: [] }, { name: 'caveman_browse', binary: browse, args: [] }, { name: 'cavemem', binary: memory, args: ['mcp'] }]
+    .filter((server): server is { name: string; binary: string; args: string[] } => server.binary !== undefined)
   if (servers.length) {
     ctx.inject(['mcpManager'], scoped => {
       for (const server of servers) {
         if (!scoped.mcpManager.list().some(entry => entry.name === server.name && entry.configured)) {
-          scoped.mcpManager.register(server.name, { transport: 'stdio', command: server.binary, args: [] })
+          scoped.mcpManager.register(server.name, { transport: 'stdio', command: server.binary, args: server.args })
         }
       }
     })
@@ -92,7 +96,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       .map(text => /^\/caveman(?::caveman)?-stats(?:\s+(.*))?$/u.exec(text.trim()))
       .reverse().find(match => match !== null)
     if (statsRequest) {
-      const report = sessionStats(agent.session.snapshotEvents(), statsRequest[1]?.trim() ?? '')
+      const report = await statsReport(ctx, agent.session, statsRequest[1]?.trim() ?? '', signal)
       const reminder = createUserMessage({
         source: { kind: 'dsh-caveman-stats', form: 'notice' },
         content: [{ type: 'text', text: `Print this report verbatim in a fenced code block. Do not infer savings.\n\n${report}` }],
