@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 - 2026-11-18
+
+- Honor HTTP and HTTPS proxy settings when downloading verified analyzers.
+
 ## 1.0.1 - 2026-11-18
 
 - Keep native child-session observations available after transient hook failures.

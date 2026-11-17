@@ -21,7 +21,7 @@ async function fileDigest(path) {
 
 /** Download and verify the executable once for the current platform and version. */
 export async function resolveLearnBinary(options = {}) {
-  const { env = process.env, platform = process.platform, arch = process.arch, fetcher = fetch } = options
+  const { env = process.env, platform = process.platform, arch = process.arch } = options
   if (env.DSH_CAVEMAN_LEARN_BINARY) return env.DSH_CAVEMAN_LEARN_BINARY
   const manifest = options.manifest ?? JSON.parse(await readFile(manifestUrl, 'utf8'))
   const version = JSON.parse(await readFile(packageUrl, 'utf8')).version
@@ -39,8 +39,19 @@ export async function resolveLearnBinary(options = {}) {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const temporary = join(directory, `.${expectedName}.${randomBytes(12).toString('hex')}.tmp`)
   let handle
+  let dispatcher
   try {
     const url = `https://github.com/Lornatang/dsh-caveman/releases/download/v${version}/${expectedName}`
+    let fetcher = options.fetcher ?? fetch
+    if (!options.fetcher && (env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY)) {
+      const { EnvHttpProxyAgent, fetch: proxyFetch } = await import('undici')
+      dispatcher = new EnvHttpProxyAgent({
+        httpProxy: env.http_proxy ?? env.HTTP_PROXY ?? '',
+        httpsProxy: env.https_proxy ?? env.HTTPS_PROXY ?? '',
+        noProxy: env.no_proxy ?? env.NO_PROXY ?? '',
+      })
+      fetcher = (input, init) => proxyFetch(input, { ...init, dispatcher })
+    }
     const response = await fetcher(url, { signal: AbortSignal.timeout(120_000) })
     if (!response.ok || !response.body) throw new Error(`Analyzer download failed (HTTP ${response.status})`)
     const advertised = Number(response.headers.get('content-length'))
@@ -66,5 +77,6 @@ export async function resolveLearnBinary(options = {}) {
   } finally {
     await handle?.close().catch(() => {})
     await rm(temporary, { force: true }).catch(() => {})
+    await dispatcher?.destroy().catch(() => {})
   }
 }
