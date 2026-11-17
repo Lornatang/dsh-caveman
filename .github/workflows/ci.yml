@@ -30,8 +30,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v5
+        with:
+          go-version-file: vendor/caveman/go.mod
+          cache-dependency-path: vendor/caveman/go.sum
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - name: Build and test DSH session analysis
+        working-directory: vendor/caveman
+        run: |
+          CGO_ENABLED=0 go test ./proxy/internal/store -run '^TestDSH(Source|Locator)' -count=1
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/dsh-caveman-learn" ./proxy/cmd/caveman-proxy
       - name: Fetch runtime binaries
         run: |
           curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/caveman-proxy_linux_amd64 -o "$RUNNER_TEMP/caveman-proxy"
@@ -49,8 +58,9 @@ jobs:
           curl -fL --retry 3 https://github.com/JuliusBrussee/caveman/releases/download/bin-v4.1.0/cavemem_linux_amd64 -o "$RUNNER_TEMP/cavemem"
           echo "ef11cb6d070a2217853330df19a842a2a94cb712bc2ae1a2fb1137e292e2653b  $RUNNER_TEMP/cavemem" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/cavemem"
-      - run: node --test tests/auto.integration.test.mjs tests/cli.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs tests/mcp.integration.test.mjs tests/memory.integration.test.mjs tests/native.integration.test.mjs
+      - run: node --test tests/auto.integration.test.mjs tests/cli.integration.test.mjs tests/compression.integration.test.mjs tests/blocks.integration.test.mjs tests/browse.integration.test.mjs tests/mcp.integration.test.mjs tests/memory.integration.test.mjs tests/native.integration.test.mjs tests/learn.integration.test.mjs
         env:
+          DSH_CAVEMAN_LEARN_BINARY: ${{ runner.temp }}/dsh-caveman-learn
           CAVEMAN_PROXY_BINARY: ${{ runner.temp }}/caveman-proxy
           CAVEMAN_BLOCKS_BINARY: ${{ runner.temp }}/caveman-blocks
           CAVEMAN_BROWSE_BINARY: ${{ runner.temp }}/caveman-browse

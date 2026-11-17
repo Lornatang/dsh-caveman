@@ -4,8 +4,11 @@ import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
+import Group from '@deepseek-ai/cordis-plugin-group'
 import LlmRuntime, { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
@@ -14,9 +17,17 @@ import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
+import AgentPreset from '@deepseek-ai/dsh-agent-preset'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import McpManager from '@deepseek-ai/dsh-mcp-manager'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
+import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { verifiedRuntime } from '../lib/runtime.js'
 import { cavemanSessionId } from '../lib/attribution.js'
 import { nativeSocketPath } from '../lib/native.js'
@@ -55,6 +66,8 @@ test('the local native runtime contributes a task contract to a DSH session', { 
       if (attempt === 99) throw new Error('native socket did not start')
       await new Promise(resolve => setTimeout(resolve, 50))
     }
+    await ctx.plugin(Loader)
+    ctx.loader.builtins.group = Group
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
@@ -62,8 +75,12 @@ test('the local native runtime contributes a task contract to a DSH session', { 
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(LocalFileSystem, { cwd: directory })
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(WorkingDirectory, { defaultDirectory: directory })
+    await ctx.plugin(JsonlSessionPersistence, { root: join(directory, 'sessions') })
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(AgentPresets, { default: 'fixture' })
     await ctx.plugin(SkillRegistry)
     if (mcpBinary) await ctx.plugin(McpManager, {})
     await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: false, middlewareEndpoint: endpoint, ...(mcpBinary ? { mcpBinary } : {}) })
@@ -117,6 +134,75 @@ test('the local native runtime contributes a task contract to a DSH session', { 
           return readFile(path, 'utf8')
         },
       }))
+      await ctx.plugin(SubagentRuntime, {})
+      await ctx.plugin(Spawn, { providerName: 'spawn' })
+      await ctx.plugin(ToolSubagent, { provider: 'spawn', toolName: 'delegate_fixture' })
+      class ChildAdapter extends LlmAdapter {
+        count = 0
+        requests = []
+        async resolveModel(provider, model) { return { provider, id: model, name: model } }
+        async *stream(options) {
+          this.requests.push(options)
+          if (this.count++ > 0) { yield { type: 'finish', reason: { kind: 'stop' } }; return }
+          const args = JSON.stringify({ path })
+          yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+          yield { type: 'tool-call-delta', index: 0, id: 'child-read', name: 'read', argumentsDelta: args }
+          yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'child-read', name: 'read', arguments: args } }
+          yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        }
+      }
+      ctx.llm.registerAdapter(['child-mock'], new ChildAdapter())
+      const parent = await ctx.agentLoop.create('native-parent-session', { provider: 'child-mock', model: 'mock' }, { cwd: directory })
+      let childId
+      const ended = new Promise(resolve => ctx.on('subagent/end', info => { childId = info.id; resolve() }))
+      const activation = await ctx.tools.execute({ agent: parent, signal: new AbortController().signal,
+        calls: [{ type: 'tool-call', id: 'native-delegate', name: 'delegate_fixture', arguments: JSON.stringify({ description: 'Inspect', prompt: 'Inspect the file.' }) }] })
+      assert.equal(activation.results[0].result.isError, false, JSON.stringify(activation.results[0].result))
+      await ended
+      const database = new DatabaseSync(join(directory, 'ccr.db'), { readOnly: true })
+      try {
+        const parentId = cavemanSessionId('native-parent-session')
+        let merge
+        for (let attempt = 0; attempt < 100; attempt++) {
+          merge = database.prepare('SELECT data FROM typed_objects WHERE session_id = ? AND source = ?').get(parentId, 'native:subagent-merge')
+          if (merge) break
+          await new Promise(resolve => setTimeout(resolve, 20))
+        }
+        assert.ok(merge, 'the child contributes its native observations to its direct parent')
+        const body = JSON.parse(Buffer.from(merge.data).toString('utf8'))
+        assert.equal(body.child_session_id, cavemanSessionId(String(childId)))
+        assert.equal(body.parent_session_id, parentId)
+        const observation = body.evidence.find(item => item.type === 'FileObservation')
+        assert.ok(observation, 'the merge retains the child file observation')
+        const recovered = await ctx.tools.execute({ agent: parent, signal: new AbortController().signal,
+          calls: [{ type: 'tool-call', id: 'child-observation', name: 'mcp__caveman__caveman_retrieve', arguments: JSON.stringify({ recovery_handle: observation.reference }) }] })
+        assert.equal(recovered.results[0].result.content[0].text, 'sample file contents', 'the merged observation remains recoverable after the child ends')
+      } finally { database.close() }
+      await ctx.plugin(AgentPreset, { id: 'cavecrew-investigator', plugins: [] })
+      await ctx.plugin(ToolSubagent, { provider: 'spawn', toolName: 'delegate_special', agentPreset: 'cavecrew-investigator' })
+      const specialAdapter = new ChildAdapter()
+      ctx.llm.registerAdapter(['special-mock'], specialAdapter)
+      const specialParent = await ctx.agentLoop.create('native-special-parent', { provider: 'special-mock', model: 'mock' }, { cwd: directory })
+      let specialId
+      const specialEnded = new Promise(resolve => ctx.on('subagent/end', info => { if (info.parentSessionId === specialParent.id) { specialId = info.id; resolve() } }))
+      const specialActivation = await ctx.tools.execute({ agent: specialParent, signal: new AbortController().signal,
+        calls: [{ type: 'tool-call', id: 'native-special-delegate', name: 'delegate_special', arguments: JSON.stringify({ description: 'Inspect', prompt: 'Inspect the file.' }) }] })
+      assert.equal(specialActivation.results[0].result.isError, false, JSON.stringify(specialActivation.results[0].result))
+      await specialEnded
+      assert.doesNotMatch(JSON.stringify(specialAdapter.requests), /Caveman task contract \(dynamic tail\)/u, 'a specialized persona keeps its own policy')
+      const specialDatabase = new DatabaseSync(join(directory, 'ccr.db'), { readOnly: true })
+      try {
+        let merge
+        for (let attempt = 0; attempt < 100; attempt++) {
+          merge = specialDatabase.prepare('SELECT data FROM typed_objects WHERE session_id = ? AND source = ?').get(cavemanSessionId('native-special-parent'), 'native:subagent-merge')
+          if (merge) break
+          await new Promise(resolve => setTimeout(resolve, 20))
+        }
+        assert.ok(merge, 'specialized children also contribute their observations')
+        const body = JSON.parse(Buffer.from(merge.data).toString('utf8'))
+        assert.equal(body.child_session_id, cavemanSessionId(String(specialId)))
+        assert.ok(body.evidence.some(item => item.type === 'FileObservation'))
+      } finally { specialDatabase.close() }
       class ReadAdapter extends LlmAdapter {
         requests = []
         constructor(changeFile = false, beforeSecond, changeWindow = false) { super(); this.changeFile = changeFile; this.beforeSecond = beforeSecond; this.changeWindow = changeWindow }

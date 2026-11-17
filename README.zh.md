@@ -17,7 +17,7 @@ kind: "package-bundle"
 - [理解实现](#understand-the-implementation)
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
-- [已知限制](#known-limitations-and-deferred-work)
+- [已知限制](#known-limitations)
 - [开发者注记](#dev-note)
 
 -----
@@ -29,7 +29,7 @@ kind: "package-bundle"
 
 ### 安装到 profile
 
-npm 发布后，可使用以下命令安装和移除：
+使用以下命令安装和移除：
 
 ```text
 dsh plugin --profile <name> add @lornatang/dsh-caveman
@@ -93,7 +93,13 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 output 模块和 Core 启用时，原生编码规则会加入系统提示词。本地运行时启动后，还会提供任务规则、衔接压缩前后的状态，并在文件确定未变化时提示复用已有观察；只有恢复 MCP 工具可用时才会展示恢复引用。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭活动规则；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
 
-`/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看近期活跃的会话，使用 `--share` 生成简短的当前会话报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
+`/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看对应时间内的用量，使用 `--share` 生成简短的当前会话报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
+
+### 用量分析
+
+运行 `npx @lornatang/dsh-caveman learn --json` 生成本地报告，或加上 `--sources dsh` 专门分析 DSH 会话；添加 `--retro` 可回顾压缩效果。首次运行会下载当前平台的分析程序，并按包内 SHA-256 校验；之后复用经过验证的本地文件。`caveman-learn` 技能可协助解读结果，并在获得同意后逐项处理。
+
+分析程序默认读取 `$DSH_HOME/sessions` 或 `~/.dsh/sessions`。如果会话持久化目录不同，可通过 `CAVEMAN_DSH_SESSION_ROOT` 指定。
 
 ### 可恢复压缩
 
@@ -192,7 +198,7 @@ bundle 提供 `cavecrew-investigator`、`cavecrew-builder` 和 `cavecrew-reviewe
 
 切换回答风格以及替换、恢复工具结果 surface 可能改变缓存前缀。实际缓存行为取决于模型提供方。
 
-<a id="known-limitations-and-deferred-work"></a>
+<a id="known-limitations"></a>
 ## 已知限制
 
 - Auto 需要配置 pi-ai provider、Caveman 代理、Cloud 登录和 OpenAI 凭证；集成测试使用本地模拟服务。

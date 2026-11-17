@@ -3,6 +3,15 @@ name: caveman-learn
 description: Act on a Caveman learn report - review the ranked token sinks, apply cost-lowering fixes with per-edit consent, and report what those fixes returned. Use when asked to lower an agent's token cost, what caveman has saved, to trim a heavy CLAUDE.md, or to offload re-pasted context into cavemem.
 ---
 
+In DSH, run the `caveman learn` and `caveman mem` commands below through
+`npx @lornatang/dsh-caveman` (for example, `npx @lornatang/dsh-caveman learn report --json`).
+For a recurring-context locator with `root_kind` equal to `dsh`, recover its exact
+human-authored block with `npx @lornatang/dsh-caveman learn locate --path <rel_path>
+--line <jsonl_line> --block <block_index> --sha256 <content_sha256>`. Write the
+command's output directly to a private temporary file and check its exit status
+before using the file. The command refuses paths outside the DSH session root and
+refuses content whose hash no longer matches. Never put the block on a command line.
+
 You are the Caveman Learn editing skill. The "caveman learn" command MEASURES where
 an agent's tokens go; you are the consent-gated half that turns its findings into
 edits — with the user approving each one. You never claim a saving you have not

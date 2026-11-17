@@ -3,6 +3,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 
 interface Counts {
+  activity: boolean
   messages: number
   usageReports: number
   output: number
@@ -12,11 +13,13 @@ interface Counts {
   modes: Map<string, { messages: number; reports: number; output: number }>
 }
 
-function countsFor(events: readonly SessionEvent[]): Counts {
-  const counts: Counts = { messages: 0, usageReports: 0, output: 0, cacheReports: 0, cacheRead: 0, attempted: 0, modes: new Map() }
+function countsFor(events: readonly SessionEvent[], cutoff?: number): Counts {
+  const counts: Counts = { activity: false, messages: 0, usageReports: 0, output: 0, cacheReports: 0, cacheRead: 0, attempted: 0, modes: new Map() }
   let mode = 'unattributed'
   for (const event of events) {
     if (event.type === 'user/message' && event.data.source.kind === 'dsh-caveman-mode') mode = event.data.source.mode
+    if (cutoff !== undefined && (!Number.isFinite(event.time) || event.time < cutoff)) continue
+    counts.activity = true
     if (event.type === 'assistant/attempt') counts.attempted++
     if (event.type !== 'assistant/message') continue
     counts.messages++
@@ -39,6 +42,7 @@ function countsFor(events: readonly SessionEvent[]): Counts {
 }
 
 function mergeCounts(target: Counts, source: Counts): void {
+  target.activity ||= source.activity
   target.messages += source.messages
   target.usageReports += source.usageReports
   target.output += source.output
@@ -124,10 +128,10 @@ export async function statsReport(ctx: Context, current: Session, flags: string,
   let sessions = 0
   let unreadable = 0
   function add(events: readonly SessionEvent[], createdAt: number): void {
-    const last = events.at(-1)?.time ?? createdAt
-    if (cutoff !== undefined && last < cutoff) return
+    const counts = countsFor(events, cutoff)
+    if (cutoff !== undefined && createdAt < cutoff && !counts.activity) return
     sessions++
-    mergeCounts(totals, countsFor(events))
+    mergeCounts(totals, counts)
   }
   for (const session of live) add(session.snapshotEvents(session.inheritedEventCount), session.header.createdAt)
   const persistence = ctx.get('sessionPersistence')

@@ -94,3 +94,21 @@ test('stored-session errors remain visible without losing other session totals',
   cancelled.abort()
   await assert.rejects(statsReport({ get: () => undefined }, live, '--all', cancelled.signal))
 })
+
+test('a time-window report excludes older usage while retaining its response-mode context', async () => {
+  const { statsReport } = await import('../lib/stats.js')
+  const now = Date.now()
+  const events = [
+    { type: 'user/message', time: now - 7_200_000, data: { source: { kind: 'dsh-caveman-mode', mode: 'ultracave' }, content: [] } },
+    { type: 'assistant/message', time: now - 7_100_000, data: { message: {}, usage: { outputTokens: 100 } } },
+    { type: 'assistant/message', time: now - 1_000, data: { message: {}, usage: { outputTokens: 7 } } },
+  ]
+  const session = { id: 'mixed-window', header: { createdAt: now - 7_200_000 }, inheritedEventCount: 0, snapshotEvents: () => events }
+  const ctx = { get(name) { return name === 'sessions' ? { list: () => [session] } : undefined } }
+  const report = await statsReport(ctx, session, '--since 1h', new AbortController().signal)
+  assert.match(report, /Sessions counted: 1/)
+  assert.match(report, /Recorded assistant messages: 1/)
+  assert.match(report, /Output tokens: 7(?:\n|$)/)
+  assert.match(report, /ultracave: 7/)
+  assert.doesNotMatch(report, /107/)
+})

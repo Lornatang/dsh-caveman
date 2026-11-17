@@ -853,6 +853,21 @@ func runLearn(logger *slog.Logger, args []string) {
 		sub = args[0]
 		args = args[1:]
 	}
+	if sub == "locate" {
+		line, lineErr := strconv.Atoi(argFlag(args, "--line", ""))
+		block, blockErr := strconv.Atoi(argFlag(args, "--block", ""))
+		if lineErr != nil || blockErr != nil {
+			fatalJSON(logger, errors.New("usage: learn locate --path RELATIVE --line N --block N --sha256 DIGEST"))
+		}
+		text, err := store.ReadDSHLocator(argFlag(args, "--path", ""), line, block, argFlag(args, "--sha256", ""))
+		if err != nil {
+			fatalJSON(logger, err)
+		}
+		if _, err := fmt.Fprint(os.Stdout, text); err != nil {
+			fatalJSON(logger, err)
+		}
+		return
+	}
 	if sub == "capabilities" {
 		// The CLI's autopilot probes this before an unattended scan: an older
 		// proxy ignores unknown flags, so it would silently write cavemem and

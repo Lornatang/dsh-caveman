@@ -47,6 +47,7 @@ func learnSessionSources() []sessionSource {
 		geminiSessionSource{root: geminiRoot()},
 		opencodeSessionSource{root: opencodeRoot()},
 		newPiSessionSource(),
+		dshSessionSource{root: dshSessionRoot()},
 		aiderSessionSource{root: aiderRoot()},
 	}
 }

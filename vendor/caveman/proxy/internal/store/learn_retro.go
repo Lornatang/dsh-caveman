@@ -240,6 +240,8 @@ func (s *Store) buildLearnRetro(sourceSet map[string]bool, since time.Time, sinc
 			results[i] = retroScanClaudeFile(paths[i], since, col)
 		case "codex":
 			results[i] = retroScanCodexFile(paths[i], since, col)
+		case "dsh":
+			results[i] = retroScanDSHFile(paths[i], since, col)
 		}
 	})
 
@@ -619,6 +621,18 @@ func retroSessionPathsUntil(sourceSet map[string]bool, since time.Time, expired 
 	} else if sourceSet["codex"] {
 		timeBoxed = true
 	}
+	if sourceSet["dsh"] && !stopped() {
+		root := dshSessionRoot()
+		refs, truncated := (dshSessionSource{root: root}).discoverUntil(stopped)
+		timeBoxed = timeBoxed || truncated
+		for _, ref := range refs {
+			if !add(root, "dsh", ref.path, nil) {
+				break
+			}
+		}
+	} else if sourceSet["dsh"] {
+		timeBoxed = true
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].modTime.Equal(out[j].modTime) {
 			return out[i].modTime.After(out[j].modTime)
@@ -626,6 +640,49 @@ func retroSessionPathsUntil(sourceSet map[string]bool, since time.Time, expired 
 		return out[i].path < out[j].path
 	})
 	return out, timeBoxed
+}
+
+// DSH's normalized source applies the same fork and usage checks to both the
+// ordinary report and its optional retrospective pass.
+func retroScanDSHFile(p retroSessionPath, since time.Time, col *retroCollector) retroFileResult {
+	res := retroFileResult{source: p.source, relPath: p.relPath, miner: newRecurringStreamMiner()}
+	seen := map[string]bool{}
+	deadline := &behaviorDeadline{at: col.deadline}
+	res.truncated = (dshSessionSource{}).scanSession(sessionRef{path: p.path, relPath: p.relPath}, since, func(event turnEvent) {
+		if event.sessionStart {
+			res.parsed = true
+			return
+		}
+		if event.ContextUsagePresent && (event.UsageMessageID == "" || !seen[event.UsageMessageID]) {
+			if event.UsageMessageID != "" {
+				seen[event.UsageMessageID] = true
+			}
+			res.usable = true
+			res.usageTurns++
+			res.usageTokens += int64(event.ContextTotal)
+			res.turns = append(res.turns, retroTurn{line: event.JSONLLine, ctx: int64(event.ContextTotal), side: event.Side})
+		}
+		if event.Compaction {
+			res.boundaries = append(res.boundaries, event.JSONLLine)
+		}
+		timestamp := ""
+		if !event.Timestamp.IsZero() {
+			timestamp = event.Timestamp.UTC().Format(time.RFC3339Nano)
+		}
+		res.miner.observeTextPayloads("dsh", p.relPath, event.JSONLLine, timestamp, event.TextPayloads, event.Side)
+		if !res.usable {
+			return
+		}
+		for _, call := range event.ToolCalls {
+			if len(call.OutputText) < retroSegmentFloorBytes {
+				continue
+			}
+			sha := contentSHA256(call.OutputText)
+			col.measure(sha, call.OutputText)
+			res.candidates = append(res.candidates, retroCandidate{sha: sha, line: event.JSONLLine, size: int64(estimateTokens(call.OutputText)), side: event.Side})
+		}
+	}, deadline)
+	return res
 }
 
 // retroScanClaudeFile reads one Claude Code transcript: provider-counted usage,

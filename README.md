@@ -17,7 +17,7 @@ English | [中文](README.zh.md)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
-- [Known Limitations](#known-limitations-and-deferred-work)
+- [Known Limitations](#known-limitations)
 - [Dev Note](#dev-note)
 
 -----
@@ -29,7 +29,7 @@ Node.js 22.19 or newer and DSH are required. Install the bundle into the profile
 
 ### Install into a profile
 
-After npm publication, install and remove the package with:
+Install and remove the package with:
 
 ```text
 dsh plugin --profile <name> add @lornatang/dsh-caveman
@@ -93,7 +93,13 @@ Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, 
 
 The native coding policy is included in the system prompt when the output module and Core are active. When the local runtime is running, it also supplies task-specific rules, maintains state across compaction, and can suggest reusing a verified unchanged file observation. Recovery references are shown only when the recovery MCP tool is available. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables the active rules; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
 
-`/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for recently active sessions, and `--share` for a concise current-session report. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
+`/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for usage within that window, and `--share` for a concise current-session report. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
+
+### Usage analysis
+
+Run `npx @lornatang/dsh-caveman learn --json` for a local report, or add `--sources dsh` to focus on DSH sessions. Add `--retro` for the retrospective compression analysis. The first run downloads the platform's analyzer and verifies it against the package's SHA-256 manifest; later runs reuse the verified local copy. The `caveman-learn` skill can review findings and guide individual fixes with consent.
+
+DSH sessions are read from `$DSH_HOME/sessions` or `~/.dsh/sessions`. Set `CAVEMAN_DSH_SESSION_ROOT` when the session persistence backend uses a different directory.
 
 ### Recoverable compression
 
@@ -192,7 +198,7 @@ The selected voice is supplied to the model on user turns. Eligible tool results
 
 Changing voice or replacing and restoring a tool-result surface can change the cached prefix. Cache behavior depends on the provider.
 
-<a id="known-limitations-and-deferred-work"></a>
+<a id="known-limitations"></a>
 ## Known Limitations
 
 - Auto requires a configured pi-ai provider, Caveman proxy, Cloud login, and OpenAI credential. The integration tests use local mock services.

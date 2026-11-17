@@ -866,6 +866,8 @@ func sourceDisplayName(source string) string {
 		return "opencode"
 	case "aider":
 		return "aider"
+	case "dsh":
+		return "DSH"
 	default:
 		return source
 	}
@@ -1255,7 +1257,7 @@ func normalizeSources(sources []string) map[string]bool {
 		}
 	}
 	if len(set) == 0 {
-		set = map[string]bool{"codex": true, "claude": true, "gemini": true, "opencode": true, "aider": true, "pi": true, "caveman": true}
+		set = map[string]bool{"codex": true, "claude": true, "gemini": true, "opencode": true, "aider": true, "pi": true, "caveman": true, "dsh": true}
 	}
 	return set
 }

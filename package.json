@@ -36,6 +36,8 @@
   "files": [
     "lib",
     "scripts/caveman-cli.mjs",
+    "scripts/learn-binary.mjs",
+    "scripts/learn-checksums.json",
     "scripts/benchmark.mjs",
     "examples",
     "presets",
