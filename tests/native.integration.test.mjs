@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
+import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
@@ -16,8 +16,10 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import McpManager from '@deepseek-ai/dsh-mcp-manager'
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { verifiedRuntime } from '../lib/runtime.js'
 import { cavemanSessionId } from '../lib/attribution.js'
+import { nativeSocketPath } from '../lib/native.js'
 import * as plugin from '../lib/index.js'
 
 const binary = process.env.CAVEMAN_PROXY_BINARY
@@ -43,12 +45,23 @@ test('the local native runtime contributes a task contract to a DSH session', { 
       if (child.exitCode !== null || attempt === 99) throw new Error('native runtime did not start')
       await new Promise(resolve => setTimeout(resolve, 100))
     }
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const connected = await new Promise(resolve => {
+        const socket = connect({ path: nativeSocketPath(directory) })
+        socket.once('connect', () => { socket.destroy(); resolve(true) })
+        socket.once('error', () => resolve(false))
+      })
+      if (connected) break
+      if (attempt === 99) throw new Error('native socket did not start')
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(LocalFileSystem, { cwd: directory })
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SkillRegistry)
@@ -94,19 +107,19 @@ test('the local native runtime contributes a task contract to a DSH session', { 
       const runFile = join(directory, 'run', `${port}.json`)
       let savedRunState
       ctx.tools.register(defineTool({
-        name: 'read', description: 'Read the fixture.', parameters: { path: { type: 'string', required: true } },
+        name: 'read', description: 'Read the fixture.', parameters: { path: { type: 'string', required: true }, offset: { type: 'integer' } },
         output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
         async execute(_args, execution) {
           if (String(execution.agent?.session.id) === 'native-tamper-session' && !savedRunState) {
             savedRunState = await readFile(runFile, 'utf8')
             await writeFile(runFile, JSON.stringify({ ...JSON.parse(savedRunState), instance_token: 'different-listener' }))
           }
-          return 'sample file contents'
+          return readFile(path, 'utf8')
         },
       }))
       class ReadAdapter extends LlmAdapter {
         requests = []
-        constructor(changeFile = false, beforeSecond) { super(); this.changeFile = changeFile; this.beforeSecond = beforeSecond }
+        constructor(changeFile = false, beforeSecond, changeWindow = false) { super(); this.changeFile = changeFile; this.beforeSecond = beforeSecond; this.changeWindow = changeWindow }
         async resolveModel(provider, model) { return { provider, id: model, name: model } }
         async *stream(options) {
           this.requests.push(options)
@@ -114,7 +127,7 @@ test('the local native runtime contributes a task contract to a DSH session', { 
           if (this.changeFile && this.requests.length === 2) await writeFile(path, 'updated fixture with a different length')
           if (this.requests.length === 2) await this.beforeSecond?.()
           const id = `read-${this.requests.length}`
-          const args = JSON.stringify({ path })
+          const args = JSON.stringify({ path, ...(this.changeWindow && this.requests.length === 2 ? { offset: 2 } : {}) })
           yield { type: 'block-start', index: 0, blockType: 'tool-call' }
           yield { type: 'tool-call-delta', index: 0, id, name: 'read', argumentsDelta: args }
           yield { type: 'block-end', index: 0, block: { type: 'tool-call', id, name: 'read', arguments: args } }
@@ -140,6 +153,27 @@ test('the local native runtime contributes a task contract to a DSH session', { 
       changingReader.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect the file.' }] }))
       await changingReader.whenIdle()
       assert.doesNotMatch(JSON.stringify(changed.requests.at(-1).messages), /Current observation already exists/u, 'a changed file is never treated as current')
+      const originalContent = 'sample file contents'
+      const fixedTime = new Date('2026-01-01T00:00:00.000Z')
+      await writeFile(path, originalContent)
+      await utimes(path, fixedTime, fixedTime)
+      const stale = new ReadAdapter(false, async () => {
+        await writeFile(path, originalContent.replaceAll('a', 'z'))
+        await utimes(path, fixedTime, fixedTime)
+      })
+      ctx.llm.registerAdapter(['stale-mock'], stale)
+      const staleReader = await ctx.agentLoop.create('native-stale-session', { provider: 'stale-mock', model: 'mock' }, { cwd: directory })
+      staleReader.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect the file.' }] }))
+      await staleReader.whenIdle()
+      assert.equal((await stat(path)).size, Buffer.byteLength(originalContent))
+      assert.equal((await stat(path)).mtimeMs, fixedTime.getTime())
+      assert.doesNotMatch(JSON.stringify(stale.requests.at(-1).messages), /Current observation already exists/u, 'equal size and timestamp cannot make changed bytes current')
+      const windows = new ReadAdapter(false, undefined, true)
+      ctx.llm.registerAdapter(['window-mock'], windows)
+      const windowReader = await ctx.agentLoop.create('native-window-session', { provider: 'window-mock', model: 'mock' }, { cwd: directory })
+      windowReader.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect the file.' }] }))
+      await windowReader.whenIdle()
+      assert.doesNotMatch(JSON.stringify(windows.requests.at(-1).messages), /Current observation already exists/u, 'a different read window is not the earlier observation')
       const denied = new ReadAdapter()
       ctx.llm.registerAdapter(['denied-mock'], denied)
       const deniedReader = await ctx.agentLoop.create('native-denied-session', { provider: 'denied-mock', model: 'mock' }, { cwd: directory })

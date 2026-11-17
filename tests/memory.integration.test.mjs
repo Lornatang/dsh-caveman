@@ -23,10 +23,11 @@ const binary = process.env.CAVEMEM_BINARY
 
 test('the memory MCP stores, recalls, revises, and forgets local facts', { skip: !binary, timeout: 120_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-memory-'))
-  const keys = ['CAVEMAN_HOME', 'CAVEMAN_MCP', 'CAVEMAN_MCP_BIN', 'CAVEMAN_BROWSE_BIN']
+  const keys = ['CAVEMAN_HOME', 'CAVEMAN_MCP', 'CAVEMAN_MCP_BIN', 'CAVEMAN_BROWSE_BIN', 'CAVEMEM_BIN']
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]))
   for (const key of keys) delete process.env[key]
   process.env.CAVEMAN_HOME = directory
+  process.env.CAVEMEM_BIN = binary
   await writeFile(join(directory, 'cloud.json'), '{}')
   const ctx = new Context()
   try {
@@ -43,11 +44,11 @@ test('the memory MCP stores, recalls, revises, and forgets local facts', { skip:
     await ctx.plugin(LocalFileSystem, { cwd: directory })
     await ctx.plugin(WorkingDirectory, { defaultDirectory: directory })
     await ctx.plugin(McpManager, {})
-    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: false, memoryBinary: binary })
+    await ctx.plugin(plugin, { defaultMode: 'manual', inputCompression: false })
     for (let attempt = 0; attempt < 40 && !ctx.mcpManager.list().some(entry => entry.name === 'cavemem'); attempt++) {
       await new Promise(resolve => setTimeout(resolve, 100))
     }
-    assert.ok(ctx.mcpManager.list().some(entry => entry.name === 'cavemem'), 'memory server is registered')
+    assert.ok(ctx.mcpManager.list().some(entry => entry.name === 'cavemem'), 'installed memory server is discovered and registered')
     const waitConnected = async () => {
       for (let attempt = 0; attempt < 600; attempt++) {
         const status = ctx.mcpManager.list().find(entry => entry.name === 'cavemem')?.status

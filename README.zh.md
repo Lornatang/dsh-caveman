@@ -83,7 +83,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 | `blocksBinary` | 自动查找 | 覆盖 `caveman-blocks` 的绝对路径。 |
 | `browseBinary` | 自动查找 | 覆盖 `caveman-browse` 的绝对路径；需要 DSH MCP manager。 |
 | `mcpBinary` | 自动查找 | 覆盖 `caveman-mcp` 的绝对路径；需要 DSH MCP manager。 |
-| `memoryBinary` | 未设置 | `cavemem` 的绝对路径；启用本地记忆工具。 |
+| `memoryBinary` | 自动发现 | 覆盖 `cavemem` 的绝对路径；启用本地记忆工具。 |
 
 ### 回答模式与用量
 
@@ -130,13 +130,13 @@ Anthropic API 请求可将 [examples/caveman-anthropic.patch.yml](examples/cavem
 
 安装 `caveman-mcp` 后，DSH MCP manager 会提供 `mcp__caveman__*` 工具：`caveman_compress`、`caveman_retrieve`、`caveman_stats`、`caveman_toon_encode` 和 `caveman_toon_decode`。服务使用本地 Caveman 恢复存储保存句柄。设置 `CAVEMAN_MCP=off` 可关闭自动注册。
 
-将 `memoryBinary` 设为 `cavemem` 的绝对路径后，可使用 `mcp__cavemem__*` 工具记住、检索、修订、查看和删除本地事实。`cavemem_recover` 可取回检索句柄对应的完整原文，需要 DSH subprocess 和 working-directory 服务。记忆保存在本地 Caveman 目录。
+安装 `cavemem` 后，MCP manager 会提供 `mcp__cavemem__*` 工具，用于记住、检索、修订、查看和删除本地事实。`cavemem_recover` 可取回检索句柄对应的完整原文，需要 DSH subprocess 和 working-directory 服务。记忆保存在本地 Caveman 目录。
 
 安装 `caveman-blocks` 后，`bash` 和 `pwsh` 调用可收到 Blocks 建议。建议随结果提供，不会改写命令。Blocks 读取本地 `.blocks` 目录，并可能保存脱敏的脚本记录和使用数据；详见[遥测设置](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md)。
 
 安装 `caveman-browse` 后，DSH MCP manager 会注册 `mcp__caveman_browse__browser_snapshot`、`browser_act`、`browser_eval` 和 `browser_recover`。Browse 默认启动专用的无头 Chrome；工具共享该服务的浏览器状态，可以导航并运行 JavaScript。
 
-插件依次从 `CAVEMAN_MCP_BIN`、`CAVEMAN_BLOCKS_BIN` 或 `CAVEMAN_BROWSE_BIN`、`PATH`、`$CAVEMAN_HOME/bin`（默认 `~/.caveman/bin`）查找对应程序；profile 中的路径优先。模块开关在启动时读取，修改后重启 DSH。
+插件依次从 `CAVEMAN_MCP_BIN`、`CAVEMAN_BLOCKS_BIN`、`CAVEMAN_BROWSE_BIN` 或 `CAVEMEM_BIN`、`PATH`、`$CAVEMAN_HOME/bin`（默认 `~/.caveman/bin`）查找对应程序；profile 中的路径优先。模块开关在启动时读取，修改后重启 DSH。
 
 ### Cavecrew
 

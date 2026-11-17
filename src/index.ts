@@ -74,7 +74,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   if (blocks) registerBlocks(ctx, blocks)
   const browse = settings.browse ? findCavemanBinary('browse', config.browseBinary) : undefined
   const mcp = settings.mcp ? findCavemanBinary('mcp', config.mcpBinary) : undefined
-  const memory = settings.mcp && settings.memory && config.memoryBinary ? findCavemanBinary('memory', config.memoryBinary) : undefined
+  const memory = settings.mcp && settings.memory ? findCavemanBinary('memory', config.memoryBinary) : undefined
   if (memory) ctx.inject(['subprocess', 'workingDirectory'], scoped => registerMemoryRecovery(scoped, memory))
   const servers = [{ name: 'caveman', binary: mcp, args: [] }, { name: 'caveman_browse', binary: browse, args: [] }, { name: 'cavemem', binary: memory, args: ['mcp'] }]
     .filter((server): server is { name: string; binary: string; args: string[] } => server.binary !== undefined)

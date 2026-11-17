@@ -83,7 +83,7 @@ The bundle supplies a `caveman` row. Override only the fields you want to change
 | `blocksBinary` | auto-detected | Override the absolute path to `caveman-blocks`. |
 | `browseBinary` | auto-detected | Override the absolute path to `caveman-browse`; requires the DSH MCP manager. |
 | `mcpBinary` | auto-detected | Override the absolute path to `caveman-mcp`; requires the DSH MCP manager. |
-| `memoryBinary` | unset | Absolute path to `cavemem`; enables its local memory tools. |
+| `memoryBinary` | auto-detected | Override the absolute path to `cavemem`; enables its local memory tools. |
 
 ### Voice and usage
 
@@ -130,13 +130,13 @@ For Anthropic API traffic, merge [examples/caveman-anthropic.patch.yml](examples
 
 When `caveman-mcp` is installed, the DSH MCP manager exposes the `mcp__caveman__*` tools `caveman_compress`, `caveman_retrieve`, `caveman_stats`, `caveman_toon_encode`, and `caveman_toon_decode`. The server uses the local Caveman recovery store for its handles. Set `CAVEMAN_MCP=off` to disable automatic registration.
 
-Set `memoryBinary` to the absolute path of `cavemem` to enable `mcp__cavemem__*` tools for remembering, recalling, revising, inspecting, and forgetting local facts. `cavemem_recover` returns the exact original behind a recall handle and requires the DSH subprocess and working-directory services. Memories persist in the local Caveman home.
+When `cavemem` is installed, the MCP manager exposes `mcp__cavemem__*` tools for remembering, recalling, revising, inspecting, and forgetting local facts. `cavemem_recover` returns the exact original behind a recall handle and requires the DSH subprocess and working-directory services. Memories persist in the local Caveman home.
 
 When `caveman-blocks` is installed, `bash` and `pwsh` calls can receive Blocks suggestions. Suggestions accompany the result and do not change the command. Blocks reads the local `.blocks` directory and may save scrubbed script observations and usage data; see its [telemetry settings](https://github.com/caveman-ai/blocks/blob/main/docs/TELEMETRY.md).
 
 When `caveman-browse` is installed, the DSH MCP manager registers `mcp__caveman_browse__browser_snapshot`, `browser_act`, `browser_eval`, and `browser_recover`. Browse starts a dedicated headless Chrome by default. Its tools share the server's browser state and can navigate and run JavaScript.
 
-The plugin looks for each binary in its `CAVEMAN_MCP_BIN`, `CAVEMAN_BLOCKS_BIN`, or `CAVEMAN_BROWSE_BIN` override, on `PATH`, then in `$CAVEMAN_HOME/bin` (or `~/.caveman/bin`). Profile paths take precedence. Module switches are read on startup; restart DSH after changing them.
+The plugin looks for each binary in its `CAVEMAN_MCP_BIN`, `CAVEMAN_BLOCKS_BIN`, `CAVEMAN_BROWSE_BIN`, or `CAVEMEM_BIN` override, on `PATH`, then in `$CAVEMAN_HOME/bin` (or `~/.caveman/bin`). Profile paths take precedence. Module switches are read on startup; restart DSH after changing them.
 
 ### Cavecrew
 

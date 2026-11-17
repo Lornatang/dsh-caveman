@@ -1,14 +1,18 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { realpath, stat } from 'node:fs/promises'
+import { open, realpath, stat } from 'node:fs/promises'
 import { connect } from 'node:net'
 import { homedir } from 'node:os'
 import { join, resolve, win32 } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
+import { isDeepStrictEqual } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type { ResolvedToolSet } from '@deepseek-ai/dsh-tools'
+import type { ResolvedToolSet, ToolDefinition } from '@deepseek-ai/dsh-tools'
+import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-fs'
 import { cavemanSessionId } from './attribution.js'
 import { verifiedRuntime } from './runtime.js'
 import { isManagedTool } from './compression.js'
@@ -23,6 +27,16 @@ type PolicyMode = 'record' | 'safe' | 'max'
 interface NativeResponse { protocol_version: 1; action: string; visibility: string; fail_open: true; context?: string }
 const profiles = new Set(['record-only', 'core', 'core-lean-build', 'ledger', 'ccr-masking', 'cache-aware', 'full-safe', 'full-max'])
 const stopwords = new Set(['about', 'after', 'again', 'agent', 'before', 'build', 'change', 'code', 'could', 'create', 'does', 'from', 'have', 'help', 'implement', 'into', 'make', 'please', 'project', 'repository', 'should', 'spec', 'task', 'that', 'their', 'then', 'there', 'these', 'they', 'this', 'through', 'user', 'want', 'what', 'when', 'where', 'which', 'with', 'would', 'your'])
+
+/** Confirm that the model's assembled tool surface includes the admitted MCP recovery tool. */
+export function recoveryIsPublished(assembly: Pick<PromptAssembly, 'tools' | 'sections'>, tool: ToolDefinition): boolean {
+  const direct = assembly.tools.find(entry => entry.name === tool.name)
+  if (direct && direct.description === tool.description && isDeepStrictEqual(direct.parameters, tool.parameters)) return true
+  if (!assembly.tools.some(entry => entry.name === 'run_code')) return false
+  const sdk = assembly.sections.find(section => section.name === 'tools:sdk' && section.interpolate === false)?.text ?? ''
+  return (sdk.includes('declare const tools:') && sdk.split(`\n  ${tool.name}:`).length >= 3) ||
+    (sdk.includes('tools: Tools') && sdk.includes(`async def ${tool.name}(`))
+}
 
 /** Hash and classify the prompt locally; the runtime does not receive the prompt text. */
 export function nativePrompt(prompt: string): { prompt: { bytes: number; sha256: string }; task_profile: { type: string; terms: string[]; continuation: boolean } } {
@@ -71,26 +85,27 @@ function validResponse(value: unknown): value is NativeResponse {
   return true
 }
 
-async function nativeCall(home: string, request: object, signal?: AbortSignal): Promise<NativeResponse | undefined> {
+export async function nativeCall(home: string, request: object, signal?: AbortSignal): Promise<NativeResponse | undefined> {
   if (signal?.aborted) return undefined
   const payload = Buffer.from(JSON.stringify(request) + '\n')
   if (payload.length > 2 * 1024 * 1024) return undefined
-  return new Promise(resolveResponse => {
+  const attempt = () => new Promise<{ response?: NativeResponse; retry: boolean }>(resolveResponse => {
     let finished = false
+    let connected = false
     let size = 0
     const chunks: Buffer[] = []
     const socket = connect({ path: nativeSocketPath(home) })
-    const finish = (response?: NativeResponse): void => {
+    const finish = (response?: NativeResponse, retry = false): void => {
       if (finished) return
       finished = true
       signal?.removeEventListener('abort', abort)
       socket.destroy()
-      resolveResponse(response)
+      resolveResponse({ response, retry })
     }
     const abort = (): void => finish()
     signal?.addEventListener('abort', abort, { once: true })
     socket.setTimeout(250)
-    socket.once('connect', () => { if (!finished) socket.end(payload) })
+    socket.once('connect', () => { connected = true; if (!finished) socket.end(payload) })
     socket.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > 2 * 1024 * 1024) return finish()
@@ -100,20 +115,38 @@ async function nativeCall(home: string, request: object, signal?: AbortSignal): 
       try { const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8')); finish(validResponse(parsed) ? parsed : undefined) } catch { finish() }
     })
     socket.once('timeout', () => finish())
-    socket.once('error', () => finish())
+    socket.once('error', (error: NodeJS.ErrnoException) => finish(undefined, !connected && ['ENOENT', 'ECONNREFUSED'].includes(error.code ?? '')))
   })
+  const first = await attempt()
+  if (!first.retry || signal?.aborted) return first.response
+  try { await delay(40, undefined, signal ? { signal } : undefined) } catch { return undefined }
+  return (await attempt()).response
 }
 
-async function inputState(cwd: string, input: unknown): Promise<string | undefined> {
+async function inputState(ctx: Context, cwd: string, input: unknown, signal: AbortSignal): Promise<string | undefined> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const values = input as Record<string, unknown>
   const path = [values.path, values.file_path, values.file, values.filename].find(value => typeof value === 'string' && value.trim())
   if (typeof path !== 'string' || path.includes('\0')) return undefined
   try {
+    const filesystem = ctx.get('fs')
+    if (!filesystem) return undefined
     const absolute = resolve(cwd, path)
-    const [resolved, info] = await Promise.all([realpath(absolute), stat(absolute)])
-    const identity = JSON.stringify({ path: resolved, size: info.size, mtime_ms: info.mtimeMs, mode: info.mode })
-    return `sha256:${createHash('sha256').update(identity).digest('hex')}`
+    const resolved = await realpath(absolute)
+    const target = await filesystem.resolve(path, { cwd, signal })
+    if (filesystem.processPathFromHostPath(resolved) !== filesystem.processPath(target)) return undefined
+    const file = await open(resolved, 'r')
+    try {
+      const before = await file.stat()
+      if (!before.isFile() || before.size > 8 * 1024 * 1024) return undefined
+      const content = await file.readFile({ signal: AbortSignal.any([signal, AbortSignal.timeout(250)]) })
+      const [after, current, currentPath] = await Promise.all([file.stat(), stat(absolute), realpath(absolute)])
+      if (currentPath !== resolved || content.length !== before.size ||
+        [after, current].some(info => info.dev !== before.dev || info.ino !== before.ino || info.size !== before.size ||
+          info.mtimeMs !== before.mtimeMs || info.ctimeMs !== before.ctimeMs || info.mode !== before.mode)) return undefined
+      const hash = createHash('sha256').update(resolved).update('\0').update(JSON.stringify(input)).update('\0').update(content)
+      return `sha256:${hash.digest('hex')}`
+    } finally { await file.close() }
   } catch { return undefined }
 }
 
@@ -147,14 +180,28 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
     const existing = sessions.get(agent)
     if (existing?.queue) await existing.queue
     const toolSet = selections.get(agent)
-    const canRecover = toolSet && ctx.tools.get('mcp__caveman__caveman_retrieve', agent, toolSet)
-    const contexts = policy.core ? (existing?.contexts.splice(0) ?? []).filter(text => !text.includes('ccr://') || canRecover) : []
-    const withContexts = () => {
-      if (!contexts.length) return decision
-      const reminder = createUserMessage({ source: { kind: 'dsh-caveman-native', form: 'notice' }, content: [{ type: 'text', text: contexts.join('\n\n') }] })
-      return { ...decision, messages: [...decision.messages, reminder] }
+    let recovery: Promise<boolean> | undefined
+    const recoveryVisible = () => recovery ??= (async () => {
+      if (!toolSet) return false
+      const tool = ctx.tools.get('mcp__caveman__caveman_retrieve', agent, toolSet)
+      if (!tool) return false
+      try { return recoveryIsPublished(await ctx.systemPrompt.assemble({ scope: agent, agent, modelSelection, toolSet, signal }), tool) }
+      catch { signal.throwIfAborted(); return false }
+    })()
+    const hasReference = (message: (typeof decision.messages)[number]) => message.source.kind === 'dsh-caveman-native' &&
+      message.content.some(block => block.type === 'text' && block.text.includes('ccr://'))
+    const working = decision.messages.some(hasReference) && !await recoveryVisible()
+      ? { ...decision, messages: decision.messages.filter(message => !hasReference(message)) } : decision
+    const contexts: string[] = []
+    for (const text of policy.core ? existing?.contexts.splice(0) ?? [] : []) {
+      if (!text.includes('ccr://') || await recoveryVisible()) contexts.push(text)
     }
-    const prompts = decision.messages.filter(message => message.source.kind === 'user')
+    const withContexts = () => {
+      if (!contexts.length) return working
+      const reminder = createUserMessage({ source: { kind: 'dsh-caveman-native', form: 'notice' }, content: [{ type: 'text', text: contexts.join('\n\n') }] })
+      return { ...working, messages: [...working.messages, reminder] }
+    }
+    const prompts = working.messages.filter(message => message.source.kind === 'user')
       .map(message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')).filter(Boolean)
     if (!prompts.length) return withContexts()
     const instance = await runtimeInstance(endpoint, home, signal)
@@ -176,7 +223,7 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
       signal.throwIfAborted()
       const response = await nativeCall(home, { ...base, event: { type: 'prompt.submit', timestamp_ms: Date.now() }, ...nativePrompt(prompt) }, signal)
       if (!response) { sessions.delete(agent); break }
-      if (policy.core && response.context && (!response.context.includes('ccr://') || canRecover)) contexts.push(response.context)
+      if (policy.core && response.context && (!response.context.includes('ccr://') || await recoveryVisible())) contexts.push(response.context)
     }
     return withContexts()
   })
@@ -204,20 +251,21 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
     if (!state) return next()
     if (await runtimeInstance(endpoint, home, exec.signal) !== state.instance) { sessions.delete(exec.agent); return next() }
     const base = { protocol_version: 1, policy_mode: policy.mode, profile: policy.profile, agent: { id: 'dsh', surface: 'dsh' }, session: state.session }
-    const beforeState = await inputState(state.session.cwd, exec.arguments)
+    const beforeState = exec.name === 'read' ? await inputState(ctx, state.session.cwd, exec.arguments, exec.signal) : undefined
     const before = await nativeCall(home, { ...base, event: { type: 'tool.before', timestamp_ms: Date.now() },
       tool: { name: exec.name, input: exec.arguments, ...(beforeState ? { input_state: beforeState } : {}) } }, exec.signal)
     if (!before) { sessions.delete(exec.agent); return next() }
     const result = await next()
+    let afterState: string | undefined
     if (!exec.signal.aborted && await runtimeInstance(endpoint, home, exec.signal) === state.instance) {
-      const afterState = await inputState(state.session.cwd, exec.arguments)
+      afterState = exec.name === 'read' ? await inputState(ctx, state.session.cwd, exec.arguments, exec.signal) : undefined
       const textOnly = result.content.every(block => block.type === 'text') && result.content.reduce((sum, block) => sum + (block.type === 'text' ? Buffer.byteLength(block.text, 'utf8') : 0), 0) <= 1_500_000
       const content = textOnly ? result.content.map(block => block.type === 'text' ? block.text : '').join('\n') : ''
       await nativeCall(home, { ...base, event: { type: result.isError ? 'tool.failure' : 'tool.after', timestamp_ms: Date.now() },
         tool: { name: exec.name, input: exec.arguments, ...(afterState ? { input_state: afterState } : {}), ...(content ? { output: Buffer.from(content).toString('base64') } : {}) } }, exec.signal)
     }
     const canRecover = exec.toolSet && ctx.tools.get('mcp__caveman__caveman_retrieve', exec.agent, exec.toolSet)
-    if (!policy.core || !before?.context || (before.context.includes('ccr://') && !canRecover) || exec.signal.aborted) return result
+    if (!policy.core || !before?.context || (before.context.includes('ccr://') && (!canRecover || !beforeState || beforeState !== afterState)) || exec.signal.aborted) return result
     const reminder = createUserMessage({ source: { kind: 'dsh-caveman-native', form: 'notice' }, content: [{ type: 'text', text: before.context }] })
     return { ...result, additionalContexts: [...result.additionalContexts ?? [], reminder] }
   })
