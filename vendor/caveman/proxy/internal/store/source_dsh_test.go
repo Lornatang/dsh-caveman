@@ -287,3 +287,33 @@ func TestDSHSourceCountsCatalogChildrenOnceAtTheirCreationTime(t *testing.T) {
 		t.Fatalf("child creation lines = %v, want the first recent catalog fact only", lines)
 	}
 }
+
+func TestDSHSourceDoesNotRemineProjectedOldUserMessages(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now().UTC()
+	path := filepath.Join(root, "session.v4.jsonl")
+	message := func(seq int, when time.Time, id, text string) map[string]any {
+		return map[string]any{"type": "user/message", "seq": seq, "time": when.UnixMilli(), "data": map[string]any{"id": id, "source": map[string]any{"kind": "user"}, "content": []any{map[string]any{"type": "text", "text": text}}}}
+	}
+	writeDSHFixture(t, path, []map[string]any{
+		{"type": "session", "version": 4, "id": "session", "createdAt": now.Add(-2 * time.Hour).UnixMilli(), "isSeeded": false, "delegationDepth": 0},
+		message(0, now.Add(-2*time.Hour), "same-id", "old"), message(1, now, "same-id", "old"), message(2, now, "new-id", "new"),
+	})
+	writeDSHFixture(t, filepath.Join(root, "seed", "session.v4.jsonl"), []map[string]any{
+		{"type": "session", "version": 4, "id": "seed", "createdAt": now.UnixMilli(), "isSeeded": true, "delegationDepth": 1},
+		message(0, now, "same-id", "old"), {"type": "session/end-seed", "seq": 1, "time": now.UnixMilli(), "data": map[string]any{"inherited": true}},
+		message(2, now, "same-id", "old"), message(3, now, "new-id", "new"),
+	})
+	source := dshSessionSource{root: root}
+	refs, _ := source.discover(nil)
+	if len(refs) != 2 {
+		t.Fatalf("discovered %d sessions", len(refs))
+	}
+	for _, ref := range refs {
+		var texts []string
+		source.scanSession(ref, now.Add(-time.Hour), func(event turnEvent) { texts = append(texts, event.TextPayloads...) }, nil)
+		if strings.Join(texts, "|") != "new" {
+			t.Fatalf("%s: recent human inputs = %q, want only the new message", ref.relPath, texts)
+		}
+	}
+}

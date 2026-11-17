@@ -63,6 +63,10 @@ function available(value: number, reports: number, messages: number): string {
   return reports < messages ? `${value} known (partial; total unavailable)` : String(value)
 }
 
+function sharedReport(counts: Counts): string {
+  return `Caveman: ${counts.messages} recorded assistant messages, ${available(counts.output, counts.usageReports, counts.messages)} output tokens; savings unknown.`
+}
+
 function linesFor(counts: Counts): string[] {
   const lines = [
     `Recorded assistant messages: ${counts.messages}`,
@@ -109,7 +113,7 @@ export function sessionStats(events: readonly SessionEvent[], flags: string): st
   const options = parseOptions(flags)
   const counts = countsFor(events)
   if (options.share) {
-    return `Caveman: ${counts.messages} recorded assistant messages, ${available(counts.output, counts.usageReports, counts.messages)} output tokens; savings unknown.`
+    return sharedReport(counts)
   }
   return ['DSH session usage (recorded assistant messages only)', ...linesFor(counts)].join('\n')
 }
@@ -166,6 +170,7 @@ export async function statsReport(ctx: Context, current: Session, flags: string,
     signal.throwIfAborted()
     unreadable += workers.filter(result => result.status === 'rejected').length
   }
+  if (options.share) return `${sharedReport(totals)}${!historyAvailable || unreadable ? ' History incomplete.' : ''}`
   const lines = [`DSH usage across sessions${options.since ? ` (last ${options.since.label})` : ''}`, `Sessions counted: ${sessions}`]
   if (!historyAvailable) lines.push('History unavailable; showing live sessions only.')
   if (unreadable) lines.push(`Stored session read or close errors: ${unreadable} (totals may be incomplete)`)

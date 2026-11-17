@@ -242,11 +242,21 @@ func (s dshSessionSource) scanSession(ref sessionRef, since time.Time, emit func
 			continue
 		}
 		seq, valid := dshInt(row["seq"])
-		if !valid || (seeded && version < 2 && seq < seedLength) || (seeded && version >= 2 && seq <= seedCut) {
+		if !valid {
 			continue
 		}
 		kind := firstString(row["type"])
 		data := asMap(row["data"])
+		duplicateUser := false
+		if kind == "user/message" && firstString(asMap(data["source"])["kind"]) == "user" {
+			id := firstString(data["id"])
+			if id != "" {
+				duplicateUser, seenUsers[id] = seenUsers[id], true
+			}
+		}
+		if (seeded && version < 2 && seq < seedLength) || (seeded && version >= 2 && seq <= seedCut) {
+			continue
+		}
 		if kind == "request/context" {
 			provider, model = firstString(data["provider"], provider), firstString(data["model"], model)
 		}
@@ -275,11 +285,7 @@ func (s dshSessionSource) scanSession(ref sessionRef, since time.Time, emit func
 		out := turnEvent{Timestamp: ts, JSONLLine: lineNo, RelPath: ref.relPath, Repo: repo, Side: side, ProviderKey: provider, Model: model}
 		switch kind {
 		case "user/message":
-			id := firstString(data["id"])
-			if firstString(asMap(data["source"])["kind"]) == "user" && (id == "" || !seenUsers[id]) {
-				if id != "" {
-					seenUsers[id] = true
-				}
+			if firstString(asMap(data["source"])["kind"]) == "user" && !duplicateUser {
 				out.TextPayloads = piTextPayloads("user", data)
 			}
 		case "assistant/message":

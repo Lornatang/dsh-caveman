@@ -111,4 +111,8 @@ test('a time-window report excludes older usage while retaining its response-mod
   assert.match(report, /Output tokens: 7(?:\n|$)/)
   assert.match(report, /ultracave: 7/)
   assert.doesNotMatch(report, /107/)
+  const shared = await statsReport(ctx, session, '--since 1h --share', new AbortController().signal)
+  assert.match(shared, /^Caveman: 1 recorded assistant messages, 7 output tokens; savings unknown\./u)
+  assert.match(shared, /History incomplete/u)
+  assert.doesNotMatch(shared, /107/u)
 })

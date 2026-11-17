@@ -10,11 +10,11 @@ test('the analyzer download is verified, cached, and repaired after modification
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-download-'))
   const bytes = Buffer.from('test executable')
   const sha256 = createHash('sha256').update(bytes).digest('hex')
-  const manifest = { version: '0.1.0', binaries: { 'linux-x64': { name: 'dsh-caveman-learn_linux_amd64', sha256 } } }
+  const manifest = { version: '1.0.0', binaries: { 'linux-x64': { name: 'dsh-caveman-learn_linux_amd64', sha256 } } }
   let downloads = 0
   const fetcher = async url => {
     downloads++
-    assert.equal(url, 'https://github.com/Lornatang/dsh-caveman/releases/download/v0.1.0/dsh-caveman-learn_linux_amd64')
+    assert.equal(url, 'https://github.com/Lornatang/dsh-caveman/releases/download/v1.0.0/dsh-caveman-learn_linux_amd64')
     return new Response(bytes)
   }
   try {

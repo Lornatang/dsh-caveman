@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-11-18
+## 1.0.0 - 2026-11-18
 
 - Provide Caveman skills and session-specific response styles.
 - Register Cavecrew investigator, builder, and reviewer presets and delegation tools.

@@ -43,7 +43,7 @@ git clone https://github.com/Lornatang/dsh-caveman.git
 cd dsh-caveman
 npm ci
 npm pack
-dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
+dsh plugin --profile <name> add ./lornatang-dsh-caveman-1.0.0.tgz
 ```
 
 `add` 命令把 bundle 组合进 profile。patch 会插入 `caveman` 行、三个 Cavecrew 预设及其委派工具。`add` 或 `remove` 后重启 DSH，使 profile 重新加载配置。
@@ -93,7 +93,7 @@ bundle 自带 `caveman` 行。在 profile 的 `cordis.patch.yml` 中添加覆盖
 
 output 模块和 Core 启用时，原生编码规则会加入系统提示词。本地运行时启动后，还会提供任务规则、衔接压缩前后的状态，并在文件确定未变化时提示复用已有观察；只有恢复 MCP 工具可用时才会展示恢复引用。设置 `CAVEMAN_CORE=off`、使用 record 模式或 `record-only` 原生 profile 可关闭活动规则；更改后重启 DSH。`core-lean-build` profile 会额外加入 lean-build 规则。
 
-`/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看对应时间内的用量，使用 `--share` 生成简短的当前会话报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
+`/caveman-stats` 报告已提交 assistant 消息中记录的用量，并在有记录时按回答模式归属输出。使用 `--all` 查看当前及存储的会话，使用 `--since 7d` 或 `--since 24h` 查看对应时间内的用量，使用 `--share` 生成所选范围的简短报告。历史总数排除分叉继承的事件，并标明不可读取的记录。没有对照数据时，节省量为未知。
 
 ### 用量分析
 

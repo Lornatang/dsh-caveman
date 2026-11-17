@@ -43,7 +43,7 @@ git clone https://github.com/Lornatang/dsh-caveman.git
 cd dsh-caveman
 npm ci
 npm pack
-dsh plugin --profile <name> add ./lornatang-dsh-caveman-0.1.0.tgz
+dsh plugin --profile <name> add ./lornatang-dsh-caveman-1.0.0.tgz
 ```
 
 The `add` command composes the bundle into the profile. Its patches insert the `caveman` row, three Cavecrew presets, and their delegation tools. Restart DSH after `add` or `remove` so the profile reloads its composition.
@@ -93,7 +93,7 @@ Use `/caveman`, `/ultracave`, `/megacave`, `/caveman ultra`, `/caveman wenyan`, 
 
 The native coding policy is included in the system prompt when the output module and Core are active. When the local runtime is running, it also supplies task-specific rules, maintains state across compaction, and can suggest reusing a verified unchanged file observation. Recovery references are shown only when the recovery MCP tool is available. `CAVEMAN_CORE=off`, record mode, or the `record-only` native profile disables the active rules; restart DSH after changing these settings. The `core-lean-build` profile adds the lean-build policy.
 
-`/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for usage within that window, and `--share` for a concise current-session report. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
+`/caveman-stats` reports usage recorded on committed assistant messages, with output attributed to response modes when recorded. Use `--all` for live and stored sessions, `--since 7d` or `--since 24h` for usage within that window, and `--share` for a concise report of the selected scope. Historical totals exclude fork-inherited events and identify unavailable records. Savings remain unknown without a comparison.
 
 ### Usage analysis
 
