@@ -1,16 +1,11 @@
 # Changelog
 
-## 1.0.2 - 2026-11-18
+## 0.1.0 - 2026-11-18
 
 - Honor HTTP and HTTPS proxy settings when downloading verified analyzers.
 
-## 1.0.1 - 2026-11-18
-
 - Keep native child-session observations available after transient hook failures.
 - Read native responses promptly and allow bounded transport scheduling slack.
-
-## 1.0.0 - 2026-11-18
-
 - Provide Caveman skills and session-specific response styles.
 - Register Cavecrew investigator, builder, and reviewer presets and delegation tools.
 - Support recoverable native tool-result compression and session usage reports.
