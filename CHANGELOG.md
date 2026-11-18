@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 - 2026-11-19
+
+- Cache the verified local runtime identity for one second per endpoint, so a tool call performs one health check instead of two while a runtime restart still invalidates sessions.
+- Skip the second read-and-hash of a read tool input when the runtime response carries no ccr:// recovery context.
+- Cache per-session surface manifests by content generation and node count, so unchanged surfaces are not re-hashed on every agent step.
+- Keep the verified analyzer binaries attached to this release under the new version.
+
 ## 0.1.4 - 2026-11-19
 
 - Restore the POSIX native-socket retry: a socket the runtime has not created yet is retried instead of disabling the call, while a replaced or foreign-owned path is still refused before any request is sent.

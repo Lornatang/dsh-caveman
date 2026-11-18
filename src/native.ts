@@ -178,13 +178,32 @@ async function inputState(ctx: Context, cwd: string, input: unknown, signal: Abo
   } catch { return undefined }
 }
 
+const RUNTIME_VERIFICATION_TTL_MS = 1_000
+const verifiedInstances = new Map<string, { token: string; expires: number }>()
+
 async function runtimeInstance(endpoint: string, home: string, signal?: AbortSignal): Promise<string | undefined> {
-  if (!await verifiedRuntime(endpoint, process.env, signal)) return undefined
+  signal?.throwIfAborted()
+  const key = `${endpoint}\u0000${home}`
+  const cached = verifiedInstances.get(key)
+  if (cached && cached.expires > Date.now()) return cached.token
+  if (!await verifiedRuntime(endpoint, process.env, signal)) {
+    verifiedInstances.delete(key)
+    return undefined
+  }
   try {
     const port = Number(new URL(endpoint).port || 80)
     const token: unknown = JSON.parse(readFileSync(join(home, 'run', `${port}.json`), 'utf8')).instance_token
-    return typeof token === 'string' && token ? token : undefined
-  } catch { return undefined }
+    if (typeof token !== 'string' || !token) {
+      verifiedInstances.delete(key)
+      return undefined
+    }
+    if (verifiedInstances.size >= 32) verifiedInstances.delete(verifiedInstances.keys().next().value!)
+    verifiedInstances.set(key, { token, expires: Date.now() + RUNTIME_VERIFICATION_TTL_MS })
+    return token
+  } catch {
+    verifiedInstances.delete(key)
+    return undefined
+  }
 }
 
 /** Add dynamic native task context when the verified local runtime is running. */
@@ -288,16 +307,19 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
     const before = await nativeCall(home, { ...base, event: { type: 'tool.before', timestamp_ms: Date.now() },
       tool: { name: exec.name, input: exec.arguments, ...(beforeState ? { input_state: beforeState } : {}) } }, exec.signal)
     const result = await next()
+    const recoveryContext = before?.context?.includes('ccr://') ?? false
     let afterState: string | undefined
     if (!exec.signal.aborted && await runtimeInstance(endpoint, home, exec.signal) === state.instance) {
-      afterState = exec.name === 'read' ? await inputState(ctx, state.session.cwd, exec.arguments, exec.signal) : undefined
+      // The comparison only gates a ccr:// reminder, so skip the second full
+      // read-and-hash when the before response carries no recovery context.
+      afterState = exec.name === 'read' && recoveryContext ? await inputState(ctx, state.session.cwd, exec.arguments, exec.signal) : undefined
       const textOnly = result.content.every(block => block.type === 'text') && result.content.reduce((sum, block) => sum + (block.type === 'text' ? Buffer.byteLength(block.text, 'utf8') : 0), 0) <= 1_500_000
       const content = textOnly ? result.content.map(block => block.type === 'text' ? block.text : '').join('\n') : ''
       await nativeCall(home, { ...base, event: { type: result.isError ? 'tool.failure' : 'tool.after', timestamp_ms: Date.now() },
         tool: { name: exec.name, input: exec.arguments, ...(afterState ? { input_state: afterState } : {}), ...(content ? { output: Buffer.from(content).toString('base64') } : {}) } }, exec.signal)
     }
     const canRecover = exec.toolSet && ctx.tools.get('mcp__caveman__caveman_retrieve', exec.agent, exec.toolSet)
-    if (!policy.core || state.specialized || !before?.context || (before.context.includes('ccr://') && (!canRecover || !beforeState || beforeState !== afterState)) || exec.signal.aborted) return result
+    if (!policy.core || state.specialized || !before?.context || (recoveryContext && (!canRecover || !beforeState || beforeState !== afterState)) || exec.signal.aborted) return result
     const reminder = createUserMessage({ source: { kind: 'dsh-caveman-native', form: 'notice' }, content: [{ type: 'text', text: before.context }] })
     return { ...result, additionalContexts: [...result.additionalContexts ?? [], reminder] }
   })

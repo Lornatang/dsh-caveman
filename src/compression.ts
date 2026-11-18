@@ -157,13 +157,23 @@ export function resolveOriginalResult(session: Session, event: SessionEvent<'too
   return current
 }
 
-function manifestFor(session: Session): { id: string; sha256: string }[] {
-  return session.surface.nodes.map(seq => {
+interface SessionManifest { entries: { id: string; sha256: string }[]; bytes: number }
+const manifests = new WeakMap<Session, { generation: number; count: number; value: SessionManifest }>()
+
+function manifestFor(session: Session): SessionManifest {
+  const generation = session.surface.contentGeneration
+  const count = session.surface.nodes.length
+  const cached = manifests.get(session)
+  if (cached && cached.generation === generation && cached.count === count) return cached.value
+  const entries = session.surface.nodes.map(seq => {
     let event = session.eventAt(seq)!
     if (event.type === 'tool/result') event = resolveOriginalResult(session, event)
     const data = event.type === 'user/message' ? event.data : 'message' in event.data ? event.data.message : event.data
     return { id: `seq-${event.seq}`, sha256: createHash('sha256').update(JSON.stringify(data)).digest('hex') }
   })
+  const value = { entries, bytes: Buffer.byteLength(JSON.stringify(entries), 'utf8') }
+  manifests.set(session, { generation, count, value })
+  return value
 }
 
 function surfaceMatchesManifest(session: Session, manifest: readonly { id: string }[]): boolean {
@@ -355,7 +365,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     try { capabilities = await runtime.ready(signal) } catch { signal.throwIfAborted(); return decision }
     const manifest = manifestFor(session)
     const maxSegments = capabilities.limits.max_segments ?? 256
-    const byteBudget = Math.max(0, capabilities.limits.request_bytes - Buffer.byteLength(JSON.stringify(manifest), 'utf8') - 16_384)
+    const byteBudget = Math.max(0, capabilities.limits.request_bytes - manifest.bytes - 16_384)
     const prepared = eligible.map(candidate => {
       const sourceId = `seq-${resolveOriginalResult(session, candidate.event).seq}`
       const segments = candidate.blocks.map(block => ({
@@ -368,18 +378,18 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
     const batches = planCompressionBatches(prepared, byteBudget, maxSegments)
     try { for (const group of batches) {
       signal.throwIfAborted()
-      if (!surfaceMatchesManifest(session, manifest)) { restore(session); return decision }
+      if (!surfaceMatchesManifest(session, manifest.entries)) { restore(session); return decision }
       const candidates = group.filter(candidate => session.surface.nodes.includes(candidate.seq))
       if (!candidates.length || ctx.tools.get(tool.name, agent, toolSet) !== tool) continue
       const segments = candidates.flatMap(candidate => candidate.segments)
       const optimization = await runtime.optimize({
-        scope, binding, adapter: ADAPTER, manifest,
+        scope, binding, adapter: ADAPTER, manifest: manifest.entries,
         candidates: segments,
         model: { provider: modelSelection.provider, id: modelSelection.model, protocol: 'dsh' },
         recoveryOverheadText: JSON.stringify(published), signal,
       })
       signal.throwIfAborted()
-      if (!surfaceMatchesManifest(session, manifest) || ctx.tools.get(tool.name, agent, toolSet) !== tool) {
+      if (!surfaceMatchesManifest(session, manifest.entries) || ctx.tools.get(tool.name, agent, toolSet) !== tool) {
         restore(session)
         return decision
       }
