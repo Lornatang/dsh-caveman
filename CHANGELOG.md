@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 - 2026-11-19
+
+- Restore the POSIX native-socket retry: a socket the runtime has not created yet is retried instead of disabling the call, while a replaced or foreign-owned path is still refused before any request is sent.
+- Keep the verified analyzer binaries attached to this release under the new version.
+
 ## 0.1.3 - 2026-11-19
 
 - Simplify the system-prompt and request-header hooks by dropping unused handler parameters; behavior is unchanged.

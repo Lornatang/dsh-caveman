@@ -86,18 +86,24 @@ function validResponse(value: unknown): value is NativeResponse {
 }
 
 /** Refuse a replaced socket path before sending prompt terms or tool data over it. */
-async function trustedSocket(path: string): Promise<boolean> {
-  if (process.platform === 'win32') return true
+async function socketTrust(path: string): Promise<'trusted' | 'missing' | 'untrusted'> {
+  if (process.platform === 'win32') return 'trusted'
   try {
     const info = await lstat(path)
-    if (!info.isSocket()) return false
-    return typeof process.getuid === 'function' ? info.uid === process.getuid() : true
-  } catch { return false }
+    if (!info.isSocket()) return 'untrusted'
+    return typeof process.getuid === 'function' && info.uid !== process.getuid() ? 'untrusted' : 'trusted'
+  } catch (error) {
+    // A runtime that is still starting has no socket yet. Report it as absent so the
+    // caller may retry its connection, and check this path again before each retry.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'
+    return 'untrusted'
+  }
 }
 
 export async function nativeCall(home: string, request: object, signal?: AbortSignal): Promise<NativeResponse | undefined> {
   if (signal?.aborted) return undefined
-  if (!await trustedSocket(nativeSocketPath(home))) return undefined
+  const socketPath = nativeSocketPath(home)
+  if (await socketTrust(socketPath) === 'untrusted') return undefined
   const payload = Buffer.from(JSON.stringify(request) + '\n')
   if (payload.length > 2 * 1024 * 1024) return undefined
   const attempt = () => new Promise<{ response?: NativeResponse; retry: boolean }>(resolveResponse => {
@@ -105,7 +111,7 @@ export async function nativeCall(home: string, request: object, signal?: AbortSi
     let connected = false
     let size = 0
     const chunks: Buffer[] = []
-    const socket = connect({ path: nativeSocketPath(home) })
+    const socket = connect({ path: socketPath })
     const finish = (response?: NativeResponse, retry = false): void => {
       if (finished) return
       finished = true
@@ -140,6 +146,7 @@ export async function nativeCall(home: string, request: object, signal?: AbortSi
   const first = await attempt()
   if (!first.retry || signal?.aborted) return first.response
   try { await delay(40, undefined, signal ? { signal } : undefined) } catch { return undefined }
+  if (await socketTrust(socketPath) === 'untrusted') return undefined
   return (await attempt()).response
 }
 
