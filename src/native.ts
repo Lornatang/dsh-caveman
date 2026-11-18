@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
-import { open, realpath, stat } from 'node:fs/promises'
+import { constants, readFileSync } from 'node:fs'
+import { lstat, open, realpath, stat } from 'node:fs/promises'
 import { connect } from 'node:net'
 import { homedir } from 'node:os'
 import { join, resolve, win32 } from 'node:path'
@@ -85,8 +85,19 @@ function validResponse(value: unknown): value is NativeResponse {
   return true
 }
 
+/** Refuse a replaced socket path before sending prompt terms or tool data over it. */
+async function trustedSocket(path: string): Promise<boolean> {
+  if (process.platform === 'win32') return true
+  try {
+    const info = await lstat(path)
+    if (!info.isSocket()) return false
+    return typeof process.getuid === 'function' ? info.uid === process.getuid() : true
+  } catch { return false }
+}
+
 export async function nativeCall(home: string, request: object, signal?: AbortSignal): Promise<NativeResponse | undefined> {
   if (signal?.aborted) return undefined
+  if (!await trustedSocket(nativeSocketPath(home))) return undefined
   const payload = Buffer.from(JSON.stringify(request) + '\n')
   if (payload.length > 2 * 1024 * 1024) return undefined
   const attempt = () => new Promise<{ response?: NativeResponse; retry: boolean }>(resolveResponse => {
@@ -144,7 +155,8 @@ async function inputState(ctx: Context, cwd: string, input: unknown, signal: Abo
     const resolved = await realpath(absolute)
     const target = await filesystem.resolve(path, { cwd, signal })
     if (filesystem.processPathFromHostPath(resolved) !== filesystem.processPath(target)) return undefined
-    const file = await open(resolved, 'r')
+    // A FIFO would otherwise block this pre-execute hook; O_NONBLOCK fails fast and fstat rejects it.
+    const file = await open(resolved, process.platform === 'win32' ? 'r' : constants.O_RDONLY | constants.O_NONBLOCK)
     try {
       const before = await file.stat()
       if (!before.isFile() || before.size > 8 * 1024 * 1024) return undefined

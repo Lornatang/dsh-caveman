@@ -39,6 +39,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const permitted = new Set(allowed)
   const edited = new WeakMap<object, Set<string>>()
+  const editKey = (value: string): string => {
+    const normalized = normalize(value)
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+  }
   ctx.tools.guard(exec => {
     if (!permitted.has(exec.name)) return `Cavecrew ${config.role} does not permit ${exec.name}.`
     if (config.role !== 'builder' || exec.name !== 'edit') return undefined
@@ -46,13 +50,26 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       !('file_path' in exec.arguments) || typeof exec.arguments.file_path !== 'string' || !exec.arguments.file_path.trim()) {
       return 'Cavecrew builder requires an existing file path.'
     }
-    const path = normalize(exec.arguments.file_path)
+    const path = editKey(exec.arguments.file_path)
     const paths = edited.get(exec.agent) ?? new Set<string>()
-    if (!paths.has(path) && paths.size >= 2) return 'Cavecrew builder is limited to two file paths.'
-    paths.add(path)
-    edited.set(exec.agent, paths)
+    if (!paths.has(path)) {
+      if (paths.size >= 2) return 'Cavecrew builder is limited to two file paths.'
+      paths.add(path)
+      edited.set(exec.agent, paths)
+    }
     return undefined
   })
+  if (config.role === 'builder') {
+    // The guard runs before the edit body, so refund the budget when the edit fails.
+    ctx.on('tools/execute', async (exec, next) => {
+      const result = await next()
+      if (exec.name !== 'edit' || !exec.agent || !result.isError ||
+        typeof exec.arguments !== 'object' || exec.arguments === null ||
+        !('file_path' in exec.arguments) || typeof exec.arguments.file_path !== 'string') return result
+      edited.get(exec.agent)?.delete(editKey(exec.arguments.file_path))
+      return result
+    })
+  }
   ctx.on('agent/created', async ({ agent }) => {
     const available = allowed.filter(tool => ctx.tools.get(tool, agent) !== undefined)
     agent.ctx.tools.restrict({ allow: available })

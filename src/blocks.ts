@@ -27,7 +27,7 @@ async function callHook(binary: string, input: HookInput, signal: AbortSignal): 
       signal.removeEventListener('abort', abort)
       resolveHint(hint)
     }
-    const abort = (): void => { child.kill('SIGKILL') }
+    const abort = (): void => { child.kill('SIGKILL'); finish() }
     const timer = setTimeout(abort, 2500)
     signal.addEventListener('abort', abort, { once: true })
     child.on('error', () => finish())

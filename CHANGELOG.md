@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-11-18
+
+- Settle the block hook promise on timeout or abort, so a hung analyzer cannot stall tool execution.
+- Count only successful edits against the Cavecrew builder budget and match file identities with platform-aware case folding.
+- Bound retained compression originals to 64 entries and 8 MiB, and drop an entry once it has been restored.
+- Report inherited-event statistics from the current session's own events instead of replaying the whole log.
+- Require a configured analyzer binary to be executable, and require the native bridge socket to be a socket owned by the service user on POSIX.
+- Open input-state files non-blocking so a FIFO cannot stall the pre-execution check.
+
 ## 0.1.1 - 2026-11-18
 
 - Republish the DSH plugin with the verified analyzer binaries attached to the matching GitHub release.

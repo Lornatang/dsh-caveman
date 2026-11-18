@@ -10,6 +10,7 @@ interface CompressionHistory {
         text: string;
         sourceId: string;
     }>;
+    originalBytes: number;
 }
 /** Index immutable history once per session instead of rescanning it on every step. */
 export declare class CompressionHistoryIndex {

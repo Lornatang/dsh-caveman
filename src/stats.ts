@@ -123,7 +123,7 @@ export async function statsReport(ctx: Context, current: Session, flags: string,
   signal.throwIfAborted()
   let options: StatsOptions
   try { options = parseOptions(flags) } catch (error) { return (error as Error).message }
-  if (!options.all && !options.since) return sessionStats(current.snapshotEvents(), flags)
+  if (!options.all && !options.since) return sessionStats(current.snapshotEvents(current.inheritedEventCount), flags)
   const totals = countsFor([])
   const live = ctx.get('sessions')?.list() ?? [current]
   const known = new Set(live.map(session => String(session.id)))

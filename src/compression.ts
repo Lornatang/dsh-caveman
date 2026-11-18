@@ -54,6 +54,23 @@ interface CompressionHistory {
   managedCalls: Set<string>
   hasMarker: boolean
   originals: Map<string, { text: string; sourceId: string }>
+  originalBytes: number
+}
+
+const MAX_ORIGINAL_ENTRIES = 64
+const MAX_ORIGINAL_BYTES = 8 * 1024 * 1024
+
+/** Keep recovery pages bounded; otherwise every compressed block is retained forever. */
+function rememberOriginal(state: CompressionHistory, handle: string, value: { text: string; sourceId: string }): void {
+  state.originals.set(handle, value)
+  state.originalBytes += Buffer.byteLength(value.text, 'utf8')
+  while (state.originals.size > 1 && (state.originals.size > MAX_ORIGINAL_ENTRIES || state.originalBytes > MAX_ORIGINAL_BYTES)) {
+    const oldest = state.originals.keys().next().value
+    if (oldest === undefined) break
+    const removed = state.originals.get(oldest)
+    state.originalBytes -= removed ? Buffer.byteLength(removed.text, 'utf8') : 0
+    state.originals.delete(oldest)
+  }
 }
 
 /** Index immutable history once per session instead of rescanning it on every step. */
@@ -65,6 +82,7 @@ export class CompressionHistoryIndex {
     const previous = this.states.get(session)
     const state: CompressionHistory = previous && previous.seq <= end ? previous : {
       seq: 0 as SessionLogOffset, toolNames: new Map(), managedCalls: new Set(), hasMarker: false, originals: new Map(),
+      originalBytes: 0,
     }
     for (const event of session.snapshotEvents(state.seq, end)) {
       const dispatch = event as unknown as { type: string; data: { rootCallId?: unknown; name?: unknown } }
@@ -83,7 +101,7 @@ export class CompressionHistoryIndex {
         const source = session.eventAt(event.sourceEventSeqs[0]!)
         const original = source && textBlocks(source).find(candidate => candidate.index === block.index)
         if (source?.type === 'tool/result' && original) {
-          state.originals.set(handle, { text: original.text, sourceId: `seq-${resolveOriginalResult(session, source).seq}` })
+          rememberOriginal(state, handle, { text: original.text, sourceId: `seq-${resolveOriginalResult(session, source).seq}` })
         }
       }
     }

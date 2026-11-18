@@ -28,6 +28,7 @@ function pathCommand(name: string, env: NodeJS.ProcessEnv): string | undefined {
 export function findCavemanBinary(kind: Binary, configured?: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   if (configured !== undefined) {
     if (!isAbsolute(configured)) throw new Error(`dsh-caveman: ${kind}Binary must be an absolute path`)
+    if (!executable(configured)) throw new Error(`dsh-caveman: ${kind}Binary is not an executable file: ${configured}`)
     return configured
   }
   const override = env[{ blocks: 'CAVEMAN_BLOCKS_BIN', browse: 'CAVEMAN_BROWSE_BIN', mcp: 'CAVEMAN_MCP_BIN', memory: 'CAVEMEM_BIN' }[kind]]
