@@ -81,6 +81,10 @@
     "undici": "^8.12.4",
     "yaml": "^2.8.1"
   },
+  "overrides": {
+    "undici": "$undici",
+    "@modelcontextprotocol/client": "^2.4.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",
     "@deepseek-ai/dsh-llm": "*"
