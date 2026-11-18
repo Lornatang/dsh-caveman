@@ -1,5 +1,5 @@
 {
-  "version": "0.1.5",
+  "version": "0.1.6",
   "binaries": {
     "linux-x64": {
       "name": "dsh-caveman-learn_linux_amd64",

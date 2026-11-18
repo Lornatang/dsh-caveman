@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-11-19
+
+- Compare endpoint host names instead of URL substrings when detecting provider hosts, so a crafted URL cannot satisfy a provider check by embedding a domain in its path (clears the js/incomplete-url-substring-sanitization findings).
+- Override undici to 8.12.4 and @modelcontextprotocol/client to 2.4.0, clearing six Dependabot advisories.
+- Keep the verified analyzer binaries attached to this release under the new version.
+
 ## 0.1.5 - 2026-11-19
 
 - Cache the verified local runtime identity for one second per endpoint, so a tool call performs one health check instead of two while a runtime restart still invalidates sessions.
