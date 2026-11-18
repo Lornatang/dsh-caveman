@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 - 2026-11-19
+
+- Re-release of 0.1.6: the registry staged the 0.1.6 upload without exposing an approval record, so 0.1.6 could never be published. No code changed after 0.1.6.
+- Keep the verified analyzer binaries attached to this release under the new version.
+
 ## 0.1.6 - 2026-11-19
 
 - Compare endpoint host names instead of URL substrings when detecting provider hosts, so a crafted URL cannot satisfy a provider check by embedding a domain in its path (clears the js/incomplete-url-substring-sanitization findings).
