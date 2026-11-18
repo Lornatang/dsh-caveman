@@ -320,7 +320,7 @@ export function registerCompression(ctx: Context, endpoint: string, automatic?: 
   })())
 
   const selections = new WeakMap<object, ResolvedToolSet>()
-  ctx.on('system-prompt/assemble', async (assembly, context, next) => {
+  ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     const result = await next()
     if (context.agent && context.toolSet) selections.set(context.agent, context.toolSet)
     return result

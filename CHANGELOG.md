@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 - 2026-11-19
+
+- Simplify the system-prompt and request-header hooks by dropping unused handler parameters; behavior is unchanged.
+- Keep the verified analyzer binaries attached to this release under the new version.
+
 ## 0.1.2 - 2026-11-18
 
 - Settle the block hook promise on timeout or abort, so a hung analyzer cannot stall tool execution.

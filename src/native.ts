@@ -188,7 +188,7 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
   const selections = new WeakMap<Agent, ResolvedToolSet>()
   const pending = new Set<Promise<unknown>>()
   const home = process.env.CAVEMAN_HOME ?? join(homedir(), '.caveman')
-  ctx.on('system-prompt/assemble', async (assembly, context, next) => {
+  ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     const result = await next()
     if (context.agent && context.toolSet) selections.set(context.agent, context.toolSet)
     return result

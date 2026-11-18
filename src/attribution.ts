@@ -22,5 +22,5 @@ export function cavemanRequestHeaders(endpoint: string, request: { baseURL: stri
 }
 
 export function registerAttribution(ctx: Context, endpoint: string): void {
-  ctx.on('llm-pi-ai/request-headers', (request, headers, next) => cavemanRequestHeaders(endpoint, request, next()))
+  ctx.on('llm-pi-ai/request-headers', (request, _headers, next) => cavemanRequestHeaders(endpoint, request, next()))
 }
