@@ -82,7 +82,7 @@ export function preserveOpenClawProviderCompat(model: ModelInput): CompatResult 
   }
 
   if (model.api === "openai-responses") {
-    if (nativeOpenAIHost(host) || model.baseUrl.includes("api.openai.com")) {
+    if (nativeOpenAIHost(host) || host === "api.openai.com") {
       return { ok: false, reason: "OpenClaw's native Responses cache, replay and service-tier policy cannot be preserved by public compatibility settings" };
     }
     // The bundled Responses payload resolver treats all other routes as

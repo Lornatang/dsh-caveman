@@ -10,6 +10,12 @@ import { MAX_MESSAGE_BYTES, boundedString, compatUpstreamFor, hostOf, isLoopback
 
 type Notify = (message: string, kind: "warning" | "info") => void;
 
+// Compare the endpoint's host name, never a substring of the URL: a hostile
+// host such as api.openai.com.evil.test must not look like OpenAI's endpoint.
+const hostName = (url: string): string => {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+};
+
 export class ProviderRouter {
   private pi: ExtensionAPI;
   private notify: Notify;
@@ -90,7 +96,7 @@ export class ProviderRouter {
     // this URL; its public compat type has no override. The payload hook cannot
     // recover the effective cache option or distinguish another extension's
     // removal, so leave this specific endpoint direct. Responses is unaffected.
-    const compatibilityIssue = model.api === "openai-completions" && original.includes("api.openai.com")
+    const compatibilityIssue = model.api === "openai-completions" && hostName(original) === "api.openai.com"
       ? "Pi cannot preserve this OpenAI Chat endpoint's prompt cache keys through routing"
       : undefined;
     let headerIssue: string | undefined;

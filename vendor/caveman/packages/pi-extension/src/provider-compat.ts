@@ -3,6 +3,16 @@ import type { AnthropicMessagesCompat, OpenAICompletionsCompat, OpenAIResponsesC
 
 type SelectedModel = NonNullable<ExtensionContext["model"]>;
 
+// Endpoint policy compares whole host names, never substrings of the URL: a
+// hostile host such as api.openai.com.evil.test must not match api.openai.com.
+const hostName = (url: string | undefined): string => {
+  if (!url) return "";
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+};
+// onDomain matches the domain itself and its subdomains only. The leading dot
+// in the suffix check keeps notexample.com from matching example.com.
+const onDomain = (host: string, domain: string): boolean => host === domain || host.endsWith(`.${domain}`);
+
 // Pi's coding-agent layer adds these after auth resolution, outside model.compat.
 // Canonical provider IDs keep their original attribution branch after routing.
 // For aliases, an explicit later header or an identical model header can make
@@ -17,7 +27,7 @@ export function unpreservedAttributionHeaders(
   const expected: Record<string, string | undefined> = {};
   const telemetryDisabled = telemetryEnv !== undefined && !["1", "true", "yes"].includes(telemetryEnv.toLowerCase());
   if (!telemetryDisabled) {
-    if (model.provider !== "openrouter" && model.baseUrl.includes("openrouter.ai")) {
+    if (model.provider !== "openrouter" && onDomain(host ?? "", "openrouter.ai")) {
       Object.assign(expected, { "HTTP-Referer": "https://pi.dev", "X-OpenRouter-Title": "pi", "X-OpenRouter-Categories": "cli-agent" });
     }
     if (model.provider !== "nvidia" && host === "integrate.api.nvidia.com") expected["X-BILLING-INVOKE-ORIGIN"] = "Pi";
@@ -49,7 +59,8 @@ export function unpreservedAttributionHeaders(
 export function compatForRoutedModel(model: SelectedModel): SelectedModel["compat"] {
   const provider = model.provider;
   const url = model.baseUrl;
-  const openRouter = provider === "openrouter" || url.includes("openrouter.ai");
+  const host = hostName(url);
+  const openRouter = provider === "openrouter" || onDomain(host, "openrouter.ai");
   if (model.api === "openai-responses") {
     const explicit = model.compat as OpenAIResponsesCompat | undefined;
     return { ...explicit, sessionAffinityFormat: explicit?.sessionAffinityFormat ?? (openRouter ? "openrouter" : "openai") };
@@ -66,19 +77,19 @@ export function compatForRoutedModel(model: SelectedModel): SelectedModel["compa
   if (model.api !== "openai-completions") return model.compat;
 
   const explicit = model.compat as OpenAICompletionsCompat | undefined;
-  const zai = provider === "zai" || provider === "zai-coding-cn" || url.includes("api.z.ai") || url.includes("open.bigmodel.cn");
-  const together = provider === "together" || url.includes("api.together.ai") || url.includes("api.together.xyz");
-  const moonshot = provider === "moonshotai" || provider === "moonshotai-cn" || url.includes("api.moonshot.");
-  const cloudflareWorkers = provider === "cloudflare-workers-ai" || url.includes("api.cloudflare.com");
-  const cloudflareGateway = provider === "cloudflare-ai-gateway" || url.includes("gateway.ai.cloudflare.com");
-  const nvidia = provider === "nvidia" || url.includes("integrate.api.nvidia.com");
-  const antLing = provider === "ant-ling" || url.includes("api.ant-ling.com");
-  const grok = provider === "xai" || url.includes("api.x.ai");
-  const deepseek = provider === "deepseek" || url.toLowerCase().includes("deepseek.com");
-  const nonStandard = nvidia || provider === "cerebras" || url.includes("cerebras.ai") || grok || together
-    || url.includes("chutes.ai") || deepseek || zai || moonshot
-    || provider === "opencode" || url.includes("opencode.ai") || cloudflareWorkers || cloudflareGateway || antLing;
-  const maxTokens = url.includes("chutes.ai") || deepseek || moonshot || cloudflareGateway || together || nvidia || antLing || zai;
+  const zai = provider === "zai" || provider === "zai-coding-cn" || onDomain(host, "api.z.ai") || onDomain(host, "open.bigmodel.cn");
+  const together = provider === "together" || onDomain(host, "api.together.ai") || onDomain(host, "api.together.xyz");
+  const moonshot = provider === "moonshotai" || provider === "moonshotai-cn" || onDomain(host, "api.moonshot.ai") || onDomain(host, "api.moonshot.cn");
+  const cloudflareWorkers = provider === "cloudflare-workers-ai" || onDomain(host, "api.cloudflare.com");
+  const cloudflareGateway = provider === "cloudflare-ai-gateway" || onDomain(host, "gateway.ai.cloudflare.com");
+  const nvidia = provider === "nvidia" || onDomain(host, "integrate.api.nvidia.com");
+  const antLing = provider === "ant-ling" || onDomain(host, "api.ant-ling.com");
+  const grok = provider === "xai" || onDomain(host, "api.x.ai");
+  const deepseek = provider === "deepseek" || onDomain(host, "deepseek.com");
+  const nonStandard = nvidia || provider === "cerebras" || onDomain(host, "cerebras.ai") || grok || together
+    || onDomain(host, "chutes.ai") || deepseek || zai || moonshot
+    || provider === "opencode" || onDomain(host, "opencode.ai") || cloudflareWorkers || cloudflareGateway || antLing;
+  const maxTokens = onDomain(host, "chutes.ai") || deepseek || moonshot || cloudflareGateway || together || nvidia || antLing || zai;
   const openRouterDeveloper = openRouter && (model.id.startsWith("anthropic/") || model.id.startsWith("openai/"));
   return {
     ...explicit,
