@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 - 2026-11-18
+
+- Republish the DSH plugin with the verified analyzer binaries attached to the matching GitHub release.
+
 ## 0.1.0 - 2026-11-18
 
 - Honor HTTP and HTTPS proxy settings when downloading verified analyzers.
