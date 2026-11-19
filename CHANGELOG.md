@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 - 2026-11-19
+
+- Recheck the runtime record before reusing cached health verification, so changed runtime identities cannot accept observations.
+- Record fresh reads for native reuse when their file fingerprints still match.
+- Preserve UTF-8 bytes and advance offline recovery by the exact byte range returned.
+
 ## 0.1.8 - 2026-11-19
 
 - Record fresh reads for native reuse when their file fingerprints still match.
