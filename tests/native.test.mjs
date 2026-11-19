@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -97,11 +97,19 @@ test('transient missing native responses do not discard the child session', asyn
   const ctx = {
     on(name, callback) { hooks.set(name, callback) },
     effect(callback) { cleanup = callback() },
-    get() { return undefined },
-    tools: { get() { return undefined } },
+    get(name) {
+      if (name !== 'fs') return undefined
+      return {
+        resolve: (path, { cwd }) => realpath(resolve(cwd, path)),
+        processPathFromHostPath: path => path,
+        processPath: path => path,
+      }
+    },
+    tools: { get() { return { name: 'mcp__caveman__caveman_retrieve' } } },
   }
   const requests = []
   const missing = new Set(['subagent.start', 'prompt.submit', 'tool.before'])
+  let context
   const socketServer = createServer(socket => {
     let buffer = ''
     socket.on('data', chunk => {
@@ -110,7 +118,10 @@ test('transient missing native responses do not discard the child session', asyn
       const request = JSON.parse(buffer)
       requests.push(request)
       if (missing.has(request.event.type)) socket.end()
-      else socket.end(JSON.stringify({ protocol_version: 1, action: 'allow', visibility: 'silent', fail_open: true }) + '\n')
+      else socket.end(JSON.stringify({
+        protocol_version: 1, action: 'allow', visibility: 'silent', fail_open: true,
+        ...(request.event.type === 'tool.before' && context ? { context } : {}),
+      }) + '\n')
     })
   })
   const httpServer = createHttpServer((_request, response) => {
@@ -143,6 +154,35 @@ test('transient missing native responses do not discard the child session', asyn
     hooks.get('agent/disposed')({ agent: unconfirmed })
     await cleanup()
     assert.deepEqual(requests.slice(firstCount).map(request => request.event.type), ['session.start', 'subagent.start', 'prompt.submit', 'subagent.stop', 'session.end'], 'tool input and output stay private until the native peer has replied')
+
+    missing.delete('session.start')
+    missing.delete('tool.before')
+    const reader = { session: { id: 'reader', header: { cwd: directory } } }
+    await writeFile(join(directory, 'file.txt'), 'fixture result')
+    await hooks.get('agent/pre-step')({ agent: reader, signal, modelSelection: { provider: 'mock', model: 'mock' } }, async () => decision)
+    const read = { agent: reader, signal, name: 'read', arguments: { path: 'file.txt' }, toolSet: {} }
+    const execute = hooks.get('tools/execute')
+    assert.equal(await execute(read, async () => result), result)
+    const [before, after] = requests.slice(-2)
+    assert.equal(after.event.type, 'tool.after')
+    assert.match(before.tool.input_state, /^sha256:[a-f0-9]{64}$/u)
+    assert.equal(after.tool.input_state, before.tool.input_state, 'the first successful read records a reusable observation without a reminder')
+
+    context = 'Current observation already exists: ccr://fixture'
+    const unchanged = await execute(read, async () => result)
+    assert.equal(unchanged.additionalContexts[0].content[0].text, context)
+    assert.equal(await execute(read, async () => {
+      await writeFile(join(directory, 'file.txt'), 'updated result')
+      return result
+    }), result, 'a file changed while reading receives no stale reminder')
+    const [changedBefore, changedAfter] = requests.slice(-2)
+    assert.match(changedBefore.tool.input_state, /^sha256:[a-f0-9]{64}$/u)
+    assert.equal(changedAfter.tool.input_state, undefined, 'unstable output is never recorded under the new state')
+
+    const failure = { ...result, isError: true }
+    assert.equal(await execute(read, async () => failure), failure)
+    assert.equal(requests.at(-1).event.type, 'tool.failure')
+    assert.equal(requests.at(-1).tool.input_state, undefined)
   } finally {
     if (previous === undefined) delete process.env.CAVEMAN_HOME
     else process.env.CAVEMAN_HOME = previous

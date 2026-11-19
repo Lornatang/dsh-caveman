@@ -118,19 +118,16 @@ function fallbackPage(history: CompressionHistoryIndex, session: Session, args: 
   const bytes = Buffer.from(original.text, 'utf8')
   const offset = args.offset ?? 0
   if (offset > bytes.length) throw new Error('Recovery offset exceeds the original length')
+  if (offset < bytes.length && (bytes[offset]! & 0xc0) === 0x80) throw new Error('Recovery offset is not a UTF-8 boundary')
   let end = Math.min(offset + (args.limit ?? 262144), bytes.length)
-  const decoder = new TextDecoder('utf-8', { fatal: true })
-  let page: string | undefined
-  for (let attempt = 0; attempt < 4 && end >= offset; attempt++, end--) {
-    try { page = decoder.decode(bytes.subarray(offset, end)); break } catch {}
-  }
-  if (page === undefined) throw new Error('Recovery offset is not a UTF-8 boundary')
-  const actualEnd = offset + Buffer.byteLength(page)
+  // A continuation byte at the end means the page would split a code point.
+  while (end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--
+  const page = bytes.toString('utf8', offset, end)
   return JSON.stringify({
     schema_version: 1, handle: args.handle, source_id: original.sourceId, text: page,
     original_sha256: createHash('sha256').update(bytes).digest('hex'), total_bytes: bytes.length,
-    complete: offset === 0 && actualEnd === bytes.length, kind: 'original_page', offset,
-    next_offset: actualEnd === bytes.length ? null : actualEnd,
+    complete: offset === 0 && end === bytes.length, kind: 'original_page', offset,
+    next_offset: end === bytes.length ? null : end,
   })
 }
 

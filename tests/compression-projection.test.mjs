@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CompressionHistoryIndex, planCompressionBatches, projectionCoverage, resolveOriginalResult } from '../lib/compression.js'
+import { CompressionHistoryIndex, planCompressionBatches, projectionCoverage, registerCompression, resolveOriginalResult } from '../lib/compression.js'
 
 test('compressed blocks must appear on their own tool result before dispatch', () => {
   const expected = [
@@ -67,4 +67,48 @@ test('compression history reads only new events and keeps recovery scoped to eac
   assert.equal(index.read(other).hasMarker, false)
   events.splice(0, events.length)
   assert.equal(index.read(session).hasMarker, false, 'truncated logs invalidate prior state')
+})
+
+test('offline recovery preserves BOMs and paginates at UTF-8 byte boundaries', async () => {
+  const handle = `cmw_${'a'.repeat(48)}`
+  const original = '\ufeffx\ufeffé🙂'
+  const message = text => ({ message: { content: [{ type: 'text', text }] } })
+  const events = [
+    { seq: 0, type: 'tool/result', data: message(original) },
+    { seq: 1, type: 'tool/result', sourceEventSeqs: [0],
+      data: message(`[caveman: shortened; exact original via caveman_retrieve handle=${handle}`) },
+  ]
+  const session = { id: 'offline', seq: events.length, snapshotEvents: () => events, eventAt: seq => events[seq] }
+  const exec = { agent: { session }, signal: new AbortController().signal }
+  let tool
+  let cleanup
+  registerCompression({
+    tools: { get: () => undefined, register: definition => { tool = definition } },
+    effect: callback => { cleanup = callback() },
+    on() {},
+  }, 'http://127.0.0.1:1', {
+    fetch: async () => { throw new Error('Fixture runtime offline') },
+    available: async () => false,
+  })
+  const recover = async args => JSON.parse(await tool.execute({ handle, ...args }, exec))
+  try {
+    const first = await recover({ limit: 6 })
+    assert.equal(first.text, '\ufeffx')
+    assert.equal(first.next_offset, 4)
+    assert.equal(first.total_bytes, 13)
+    assert.equal(first.complete, false)
+    const second = await recover({ offset: first.next_offset, limit: 5 })
+    assert.equal(second.text, '\ufeffé')
+    assert.equal(second.next_offset, 9)
+    const third = await recover({ offset: second.next_offset, limit: 4 })
+    assert.equal(first.text + second.text + third.text, original)
+    assert.equal(third.next_offset, null)
+    assert.equal(third.complete, false)
+    const complete = await recover({})
+    assert.equal(complete.text, original)
+    assert.equal(complete.complete, true)
+    assert.equal(complete.next_offset, null)
+    await assert.rejects(recover({ offset: 12, limit: 4 }), /UTF-8 boundary/u)
+    assert.equal((await recover({ offset: 13, limit: 4 })).text, '')
+  } finally { await cleanup() }
 })
