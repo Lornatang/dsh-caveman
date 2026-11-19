@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 - 2026-11-19
+
+- Record fresh reads for native reuse when their file fingerprints still match.
+- Preserve UTF-8 bytes and advance offline recovery by the exact byte range returned.
+
 ## 0.1.7 - 2026-11-19
 
 - Re-release of 0.1.6: the registry staged the 0.1.6 upload without exposing an approval record, so 0.1.6 could never be published. No code changed after 0.1.6.
