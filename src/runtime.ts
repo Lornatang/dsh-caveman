@@ -147,26 +147,35 @@ async function directLocalFetch(input: Parameters<typeof fetch>[0], init?: Reque
 
 /** Verify that the loopback listener matches the runtime's private run-state record. */
 export async function verifiedRuntime(endpoint: string, env: NodeJS.ProcessEnv = process.env, signal?: AbortSignal): Promise<boolean> {
+  return Boolean(await verifiedRuntimeInstance(endpoint, env.CAVEMAN_HOME ?? join(homedir(), '.caveman'), signal))
+}
+
+export interface VerifiedRuntimeInstance { readonly record: string; readonly token: string }
+
+/** Reuse a recent health check only while the private run-state record is unchanged. */
+export async function verifiedRuntimeInstance(endpoint: string, home: string, signal?: AbortSignal,
+  cached?: VerifiedRuntimeInstance): Promise<VerifiedRuntimeInstance | undefined> {
   signal?.throwIfAborted()
   const url = localOrigin(endpoint)
-  if (!url) return false
+  if (!url) return undefined
   const port = Number(url.port || 80)
   try {
-    const home = env.CAVEMAN_HOME ?? join(homedir(), '.caveman')
-    const state: unknown = JSON.parse(readFileSync(join(home, 'run', `${port}.json`), 'utf8'))
-    if (!state || typeof state !== 'object' || Array.isArray(state)) return false
+    const record = readFileSync(join(home, 'run', `${port}.json`), 'utf8')
+    if (record === cached?.record) return cached
+    const state: unknown = JSON.parse(record)
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return undefined
     const run = state as Record<string, unknown>
     if (run.schema !== 'caveman.proxy.run.v1' || (run.owner !== 'start' && run.owner !== 'wrap') ||
-      typeof run.pid !== 'number' || run.port !== port || typeof run.instance_token !== 'string' || !run.instance_token) return false
+      typeof run.pid !== 'number' || run.port !== port || typeof run.instance_token !== 'string' || !run.instance_token) return undefined
     const timeout = AbortSignal.timeout(750)
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
     const health = await directLocalFetch(`${url.origin}/health/live`, { signal: combined })
     const matches = health.ok && health.headers.get('x-caveman-instance') === run.instance_token
     await health.body?.cancel()
-    return matches
+    return matches ? { record, token: run.instance_token } : undefined
   } catch {
     signal?.throwIfAborted()
-    return false
+    return undefined
   }
 }
 

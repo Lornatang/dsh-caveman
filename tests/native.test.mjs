@@ -89,7 +89,8 @@ test('a late native response has transport slack without repeating the request',
   }
 })
 
-test('transient missing native responses do not discard the child session', async () => {
+test('transient missing native responses do not discard the child session', async t => {
+  t.mock.timers.enable({ apis: ['Date'] })
   const directory = await mkdtemp(join(tmpdir(), 'dsh-caveman-native-recovery-'))
   const previous = process.env.CAVEMAN_HOME
   const hooks = new Map()
@@ -124,7 +125,9 @@ test('transient missing native responses do not discard the child session', asyn
       }) + '\n')
     })
   })
+  let checks = 0
   const httpServer = createHttpServer((_request, response) => {
+    checks++
     response.writeHead(200, { 'x-caveman-instance': 'fixture-instance' }).end()
   })
   try {
@@ -132,7 +135,9 @@ test('transient missing native responses do not discard the child session', asyn
     await mkdir(join(directory, 'run'))
     await new Promise((resolve, reject) => httpServer.listen(0, '127.0.0.1', resolve).on('error', reject))
     const port = httpServer.address().port
-    await writeFile(join(directory, 'run', `${port}.json`), JSON.stringify({ schema: 'caveman.proxy.run.v1', owner: 'start', pid: process.pid, port, instance_token: 'fixture-instance' }))
+    const runPath = join(directory, 'run', `${port}.json`)
+    const runState = { schema: 'caveman.proxy.run.v1', owner: 'start', pid: process.pid, port, instance_token: 'fixture-instance' }
+    await writeFile(runPath, JSON.stringify(runState))
     await new Promise((resolve, reject) => socketServer.listen(nativeSocketPath(directory), resolve).on('error', reject))
     registerNative(ctx, `http://127.0.0.1:${port}`, { mode: 'safe', profile: 'full-safe', core: true })
     const agent = { session: { id: 'child', header: { cwd: directory, origin: 'subagent', parentSession: 'parent' } } }
@@ -183,6 +188,22 @@ test('transient missing native responses do not discard the child session', asyn
     assert.equal(await execute(read, async () => failure), failure)
     assert.equal(requests.at(-1).event.type, 'tool.failure')
     assert.equal(requests.at(-1).tool.input_state, undefined)
+
+    await t.test('a changed run record invalidates a cached health check before output is sent', async () => {
+      assert.equal(checks, 1, 'an unchanged record reuses the recent health check')
+      const count = requests.length
+      const latest = await execute(read, async () => {
+        await writeFile(runPath, JSON.stringify({ ...runState, instance_token: 'changed-instance' }))
+        return result
+      })
+      assert.deepEqual(requests.slice(count).map(request => request.event.type), ['tool.before'])
+      assert.equal(latest, result, 'the checked read result passes through without a reminder')
+      assert.equal(checks, 2, 'a changed record requires a fresh health check')
+      await writeFile(runPath, JSON.stringify(runState))
+      const restored = await execute(read, async () => result)
+      assert.equal(restored.additionalContexts[0].content[0].text, context)
+      assert.equal(checks, 3, 'a restored record must be verified again')
+    })
   } finally {
     if (previous === undefined) delete process.env.CAVEMAN_HOME
     else process.env.CAVEMAN_HOME = previous
