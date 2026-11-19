@@ -95,13 +95,17 @@ test('transient missing native responses do not discard the child session', asyn
   const previous = process.env.CAVEMAN_HOME
   const hooks = new Map()
   let cleanup
+  let onFileResolve
   const ctx = {
     on(name, callback) { hooks.set(name, callback) },
     effect(callback) { cleanup = callback() },
     get(name) {
       if (name !== 'fs') return undefined
       return {
-        resolve: (path, { cwd }) => realpath(resolve(cwd, path)),
+        resolve: (path, { cwd }) => {
+          onFileResolve?.()
+          return realpath(resolve(cwd, path))
+        },
         processPathFromHostPath: path => path,
         processPath: path => path,
       }
@@ -126,8 +130,10 @@ test('transient missing native responses do not discard the child session', asyn
     })
   })
   let checks = 0
-  const httpServer = createHttpServer((_request, response) => {
+  let beforeHealthResponse
+  const httpServer = createHttpServer(async (_request, response) => {
     checks++
+    try { await beforeHealthResponse?.() } catch (error) { response.destroy(error); return }
     response.writeHead(200, { 'x-caveman-instance': 'fixture-instance' }).end()
   })
   try {
@@ -203,6 +209,33 @@ test('transient missing native responses do not discard the child session', asyn
       const restored = await execute(read, async () => result)
       assert.equal(restored.additionalContexts[0].content[0].text, context)
       assert.equal(checks, 3, 'a restored record must be verified again')
+    })
+
+    await t.test('aborting the after-read fingerprint preserves the completed tool result', async () => {
+      const controller = new AbortController()
+      const count = requests.length
+      const latest = await execute({ ...read, signal: controller.signal }, async () => {
+        onFileResolve = () => {
+          onFileResolve = undefined
+          controller.abort()
+        }
+        return result
+      })
+      assert.equal(controller.signal.aborted, true)
+      assert.equal(latest, result)
+      assert.deepEqual(requests.slice(count).map(request => request.event.type), ['tool.before'])
+    })
+
+    await t.test('the run record must remain current through a fresh health check', async () => {
+      const count = requests.length
+      const latest = await execute(read, async () => {
+        t.mock.timers.tick(1_001)
+        beforeHealthResponse = () => writeFile(runPath, JSON.stringify({ ...runState, instance_token: 'changed-during-health-check' }))
+        return result
+      })
+      assert.equal(checks, 4, 'the expired proof prompts a fresh health check')
+      assert.deepEqual(requests.slice(count).map(request => request.event.type), ['tool.before'])
+      assert.equal(latest, result)
     })
   } finally {
     if (previous === undefined) delete process.env.CAVEMAN_HOME

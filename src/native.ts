@@ -308,7 +308,7 @@ export function registerNative(ctx: Context, endpoint: string, policy: { mode: P
       const observed = await inputState(ctx, state.session.cwd, exec.arguments, exec.signal)
       if (observed === beforeState) afterState = observed
     }
-    if (await runtimeInstance(endpoint, home, exec.signal) !== state.instance) return result
+    if (exec.signal.aborted || await runtimeInstance(endpoint, home, exec.signal) !== state.instance) return result
     await nativeCall(home, { ...base, event: { type: result.isError ? 'tool.failure' : 'tool.after', timestamp_ms: Date.now() },
       tool: { name: exec.name, input: exec.arguments, ...(afterState ? { input_state: afterState } : {}), ...(content ? { output: Buffer.from(content).toString('base64') } : {}) } }, exec.signal)
     if (!policy.core || state.specialized || !before?.context || exec.signal.aborted) return result

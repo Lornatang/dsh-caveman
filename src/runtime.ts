@@ -160,7 +160,8 @@ export async function verifiedRuntimeInstance(endpoint: string, home: string, si
   if (!url) return undefined
   const port = Number(url.port || 80)
   try {
-    const record = readFileSync(join(home, 'run', `${port}.json`), 'utf8')
+    const runPath = join(home, 'run', `${port}.json`)
+    const record = readFileSync(runPath, 'utf8')
     if (record === cached?.record) return cached
     const state: unknown = JSON.parse(record)
     if (!state || typeof state !== 'object' || Array.isArray(state)) return undefined
@@ -172,7 +173,7 @@ export async function verifiedRuntimeInstance(endpoint: string, home: string, si
     const health = await directLocalFetch(`${url.origin}/health/live`, { signal: combined })
     const matches = health.ok && health.headers.get('x-caveman-instance') === run.instance_token
     await health.body?.cancel()
-    return matches ? { record, token: run.instance_token } : undefined
+    return matches && readFileSync(runPath, 'utf8') === record ? { record, token: run.instance_token } : undefined
   } catch {
     signal?.throwIfAborted()
     return undefined
